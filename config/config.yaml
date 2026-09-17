@@ -14,7 +14,6 @@ devices:
     platform: Android
     udid: "127.0.0.1:16384"
     app_package: "com.cloudedge.smarteye"
-    wda_port: 8100  # 单设备不写也行，默认就是 8100,多设备需要手动分配
 
   # ========== iOS 设备 ==========
    # 用户3：一台IOS真机
