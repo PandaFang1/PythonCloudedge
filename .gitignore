@@ -1,0 +1,24 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.log
+
+# 日志目录
+operater_logs/
+config/Execution.log
+
+# 测试生成物
+reports/
+allure-results/
+serial_logs/
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# CodeBuddy 项目数据
+.codebuddy/
