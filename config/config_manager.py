@@ -56,6 +56,29 @@ class ConfigManager:
     DEPENDENCY_FIELD = "platform"
     DEPENDENT_FIELD = "wda_port"
 
+    # 串口配置——关键字段（name、port 必填）
+    SERIAL_KEYWORDS = ["name", "port"]
+
+    # 串口配置——字段类型
+    SERIAL_FIELD_TYPES = {
+        "name": str,
+        "port": str,
+        "baudrate": int,
+        "timeout": (int, float),
+        "purpose": str,
+        "device": str,
+    }
+
+    # 串口配置——可选字段默认值
+    SERIAL_DEFAULTS = {
+        "baudrate": 115200,
+        "timeout": 1,
+        "purpose": "log",
+    }
+
+    # 串口配置——purpose 允许的取值
+    SERIAL_PURPOSE_VALUES = ["control", "log"]
+
     def __init__(self, config_dir, config_list_map):
         self.config_dir = config_dir  # 初始化文件路径
         self.config_list_map = config_list_map  # yaml 中的列表名称
@@ -209,6 +232,48 @@ class ConfigManager:
         )
         logger.info("文件初始化完成")
         return devices
+
+    def get_serial_ports(self):
+        """获取串口配置列表。
+
+        config.yaml 未配置 serial_ports 节点或为空时返回空列表，不报错。
+        """
+        data = self._read_yaml_file()
+        if not data:
+            return []
+        return data.get("serial_ports") or []
+
+    def validate_serial_ports(self):
+        """校验 serial_ports 串口配置（可选节点）。
+
+        无 serial_ports 节点或列表为空时直接返回空列表，不报错；
+        存在配置时校验：关键字（name/port 必填）、类型、purpose 取值、
+        name/port 重复性。
+
+        :return: 校验通过的串口配置列表
+        :raises ConfigError: 配置非法时抛出
+        """
+        serial_ports = self.get_serial_ports()
+        if not serial_ports:
+            logger.info("未配置串口（serial_ports 为空），串口用例将被跳过")
+            return []
+
+        for serial_port in serial_ports:
+            self._keyword_check(serial_port, self.SERIAL_KEYWORDS)
+            for field_name, field_value in serial_port.items():
+                expect_type = self.SERIAL_FIELD_TYPES[field_name]
+                self._value_type_check(field_value, expect_type)
+                if field_name == "purpose":
+                    self._key_value_check(
+                        str(field_value).lower(), self.SERIAL_PURPOSE_VALUES
+                    )
+
+        # name 与 port 均需唯一
+        self._value_repeatability_check(serial_ports, "name", "name")
+        self._value_repeatability_check(serial_ports, "name", "port")
+
+        logger.info(f"串口配置校验完成，共 {len(serial_ports)} 个串口")
+        return serial_ports
 
     def get_all_devices(self):
         """获取所有设备的配置信息。"""

@@ -29,7 +29,7 @@ logger = get_logger()
 
 # 串口日志存储目录（基于项目根目录的绝对路径）
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SERIAL_LOG_DIR = os.path.join(PROJECT_ROOT, "serial_logs")
+SERIAL_LOG_DIR = os.path.join(PROJECT_ROOT, "logs", "serial_logs")
 os.makedirs(SERIAL_LOG_DIR, exist_ok=True)
 
 # ANSI 颜色码（如 \x1b[32m、\x1b[0m）
@@ -38,6 +38,10 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 # 读取循环的休眠间隔（秒）
 READ_BUSY_INTERVAL = 0.01
 READ_IDLE_INTERVAL = 0.05
+
+# 串口日志文件上限：200MB，最多保留 5 个备份（总量上限 1GB）
+SERIAL_LOG_MAX_BYTES = 200 * 1024 * 1024
+SERIAL_LOG_BACKUP_COUNT = 5
 
 
 class SerialError(Exception):
@@ -251,7 +255,8 @@ class SerialPort:
         pending = ""  # 半行缓冲
 
         logger.info(f"等待串口{self.port}获取数据")
-        with open(log_path, "a", encoding="utf-8") as log_file:
+        log_file = open(log_path, "a", encoding="utf-8")
+        try:
             while not self._stop_event.is_set():
                 try:
                     if not self.is_open:
@@ -275,6 +280,16 @@ class SerialPort:
                             )
                             log_file.write(f"{timestamp}{line}\n")
                             log_file.flush()
+                            # 单文件超过上限则轮转（关 -> rename -> 新开）
+                            if log_file.tell() >= SERIAL_LOG_MAX_BYTES:
+                                log_file.close()
+                                self._rotate_serial_log(log_path)
+                                logger.info(
+                                    f"串口{self.port}日志已轮转：{log_path}"
+                                )
+                                log_file = open(
+                                    log_path, "a", encoding="utf-8"
+                                )
                             with self._history_lock:
                                 self._history.append(line)
                             self._line_queue.put(line)
@@ -287,6 +302,38 @@ class SerialPort:
                 except Exception as exc:
                     logger.error(f"串口{self.port}读取出现未知异常：{exc}")
                     time.sleep(READ_IDLE_INTERVAL)
+        finally:
+            log_file.close()
+
+    @staticmethod
+    def _rotate_serial_log(log_path: str) -> None:
+        """按需轮转串口日志文件（按 backup_count 滚动）。
+
+        :param log_path: 当前日志文件路径
+        """
+        try:
+            # 超出备份上限的最旧文件直接删除
+            oldest = f"{log_path}.{SERIAL_LOG_BACKUP_COUNT}"
+            if os.path.exists(oldest):
+                os.remove(oldest)
+        except OSError as exc:
+            logger.warning(f"删除最旧日志失败 [{oldest}]：{exc}")
+
+        # 从 .N-1 到 .1 依次后移一位
+        for i in range(SERIAL_LOG_BACKUP_COUNT - 1, 0, -1):
+            src = f"{log_path}.{i}"
+            dst = f"{log_path}.{i + 1}"
+            if os.path.exists(src):
+                try:
+                    os.rename(src, dst)
+                except OSError as exc:
+                    logger.warning(f"日志轮转失败 [{src} -> {dst}]：{exc}")
+
+        # 当前日志 -> .1
+        try:
+            os.rename(log_path, f"{log_path}.1")
+        except OSError as exc:
+            logger.warning(f"日志轮转失败 [{log_path} -> .1]：{exc}")
 
     def _handle_read_failure(self):
         """读取失败后的统一处理：尝试重连，失败则停止线程。"""
@@ -326,6 +373,16 @@ class SerialPort:
     # ------------------------------------------------------------------
     # 关键信息提取（复制关键信息）
     # ------------------------------------------------------------------
+    def get_recent_lines(self, n: int = 200) -> str:
+        """获取最近 n 行历史数据，用于失败时附加到 allure 报告。
+
+        :param n: 返回的最大行数（默认 200 行，受 deque(maxlen=2000) 限制）
+        :return: 最近 n 行（按时间顺序），行间用 ``\\n`` 拼接；无历史时返回空字符串
+        """
+        with self._history_lock:
+            lines = list(self._history)[-n:]
+        return "\n".join(lines)
+
     def extract_info(self, pattern, timeout=10, group=1):
         """通过正则表达式从读取流中提取关键信息。
 

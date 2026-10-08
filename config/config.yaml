@@ -32,3 +32,20 @@ devices:
     udid: "00008110-000130AA1A054029"  # 你的 iPhone UDID
     app_package: "com.meari.smartcamera" # 被测应用的 Bundle ID
     wda_port: 8101  # 单设备不写也行，默认就是 8100,多设备需要手动分配
+
+# ========== 串口配置（可选，用于串口控制/日志采集） ==========
+# 未配置或列表为空时，串口用例会自动跳过，不影响 UI 用例。
+serial_ports:
+  - name: "camera_console"       # 串口唯一标识（fixture 按此名称获取）
+    port: "/dev/cu.usbserial-1140"  # 串口设备路径（Windows 如 COM3）
+    baudrate: 115200             # 波特率，默认 115200
+    timeout: 1                   # 读写超时（秒），默认 1
+    purpose: control             # 用途：control（控制命令）/ log（日志采集）
+    device: "肥猪阿熊"            # 可选：关联设备 user_name
+
+  - name: "camera_log"
+    port: "/dev/cu.usbserial-1141"
+    baudrate: 115200
+    timeout: 1
+    purpose: log
+    device: "肥猪阿熊"

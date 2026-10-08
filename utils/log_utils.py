@@ -15,7 +15,7 @@ from pathlib import Path
 
 # 创建日志存储文件夹（基于项目根目录的绝对路径）
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LOG_DIR = os.path.join(PROJECT_ROOT, "operater_logs")
+LOG_DIR = os.path.join(PROJECT_ROOT, "logs", "operater_logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # 日志格式：时间 - 文件名|方法名 - logger名 - 级别 - 信息
@@ -23,9 +23,9 @@ FORMATTER = logging.Formatter(
     "%(asctime)s - %(filename)s|%(funcName)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# 单个日志文件上限：10MB，最多保留 20 个备份
-MAX_BYTES = 10 * 1024 * 1024
-BACKUP_COUNT = 20
+# 单个日志文件上限：200MB，最多保留 5 个备份（总量上限 1GB）
+MAX_BYTES = 200 * 1024 * 1024
+BACKUP_COUNT = 5
 
 LOGGER_NAME = "po_project"
 

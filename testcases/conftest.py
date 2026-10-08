@@ -16,6 +16,7 @@ fixture 依赖链：
 import os
 import time
 import urllib.request
+from typing import Dict
 
 import allure
 import pytest
@@ -23,6 +24,7 @@ import pytest
 from pages.page_factory import PageFactory
 from utils.log_utils import get_logger
 from utils.phone_manager import DeviceInfo, PhoneManager
+from utils.serial_utils import SerialConnectError, SerialManager
 
 logger = get_logger()
 
@@ -60,7 +62,7 @@ def pytest_generate_tests(metafunc):
 
 def pytest_configure(config):
     """注册自定义 marker。"""
-    for marker in ("android", "ios", "smoke", "regression"):
+    for marker in ("android", "ios", "smoke", "regression", "serial"):
         config.addinivalue_line("markers", f"{marker}: {marker} 标记")
 
 
@@ -190,3 +192,181 @@ def pytest_runtest_makereport(item, call):
         )
     except Exception as exc:  # noqa: BLE001 截图失败不阻断测试流程
         logger.warning(f"失败截图生成失败：{exc}")
+
+    # 串口用例失败：附加最近串口输出，便于定位
+    for fixture_name in SERIAL_FIXTURE_NAMES:
+        serial_port = item.funcargs.get(fixture_name)
+        if serial_port is None:
+            continue
+        try:
+            recent = serial_port.get_recent_lines(n=200)
+            payload = recent if recent else "(串口无历史输出)"
+            allure.attach(
+                payload,
+                name=f"串口输出 [{fixture_name}]",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+        except Exception as exc:  # noqa: BLE001 串口 attach 失败不阻断
+            logger.warning(f"附加串口输出失败 [{fixture_name}]：{exc}")
+
+
+# ==================== 串口 fixtures ====================
+
+# 模块级注册表：port -> SerialPort 实例，供失败钩子失败时取最近输出附加到 allure
+_SERIAL_REGISTRY: Dict[str, "SerialPort"] = {}
+
+# 串口 fixture 名称（失败钩子据此识别当前用例用到的串口 fixture）
+SERIAL_FIXTURE_NAMES = ("serial_port", "serial_control_port", "serial_log_port")
+
+
+def _register_serial_port(port: str, serial_port: "SerialPort") -> None:
+    """注册串口实例到模块级注册表。"""
+    _SERIAL_REGISTRY[port] = serial_port
+
+
+def _unregister_serial_port(port: str) -> None:
+    """从注册表移除串口实例。"""
+    _SERIAL_REGISTRY.pop(port, None)
+
+
+def _load_serial_ports():
+    """读取并校验 config.yaml 中的 serial_ports 配置。
+
+    :return: 串口配置列表；未配置或读取失败时返回空列表
+    """
+    try:
+        from config.config_manager import load_config
+        manager = load_config()
+        return manager.validate_serial_ports()
+    except Exception as exc:  # noqa: BLE001 串口配置异常按无串口处理
+        logger.warning(f"串口配置读取/校验失败，串口用例将被跳过：{exc}")
+        return []
+
+
+def _serial_skip_reason(serial_ports) -> str:
+    """根据串口配置情况生成 skip 原因。"""
+    if not serial_ports:
+        return "未配置串口（config.yaml 无 serial_ports 节点或为空）"
+    return None
+
+
+@pytest.fixture(scope="session")
+def serial_manager():
+    """串口管理器（session 级，结束时统一关闭所有串口）。
+
+    未配置串口时 yield None，由下游 fixture 据此跳过串口用例。
+    """
+    serial_ports = _load_serial_ports()
+    if not serial_ports:
+        yield None
+        return
+
+    manager = SerialManager()
+    for config in serial_ports:
+        try:
+            manager.connect(
+                port=config["port"],
+                baudrate=config.get("baudrate", 115200),
+                timeout=config.get("timeout", 1),
+            )
+        except SerialConnectError as exc:
+            logger.warning(f"串口 [{config['name']}:{config['port']}] 连接失败：{exc}")
+    yield manager
+    manager.close_all()
+
+
+def _get_serial_port_config(serial_ports, name):
+    """按名称查找串口配置。"""
+    for config in serial_ports:
+        if config.get("name") == name:
+            return config
+    return None
+
+
+@pytest.fixture
+def serial_port(request, serial_manager):
+    """按名称获取串口连接（function 级）。
+
+    用例通过 `@pytest.mark.parametrize("serial_name", ["camera_console"])`
+    指定串口名；未配置串口、串口名不存在或连接失败时跳过。
+
+    :return: SerialPort 实例
+    """
+    serial_ports = _load_serial_ports()
+    reason = _serial_skip_reason(serial_ports)
+    if reason:
+        pytest.skip(reason)
+
+    serial_name = getattr(request, "param", None) or "serial_name"
+    config = _get_serial_port_config(serial_ports, serial_name)
+    if config is None:
+        pytest.skip(f"串口配置中不存在名称 [{serial_name}]")
+
+    if serial_manager is None:
+        pytest.skip(f"串口 [{serial_name}] 管理器不可用")
+
+    try:
+        port_obj = serial_manager.get(config["port"])
+    except SerialConnectError as exc:
+        pytest.skip(f"串口 [{serial_name}] 连接失败：{exc}")
+
+    port = config["port"]
+    _register_serial_port(port, port_obj)
+    try:
+        yield port_obj
+    finally:
+        _unregister_serial_port(port)
+
+
+@pytest.fixture
+def serial_control_port(request, serial_manager):
+    """按 purpose=control 选取控制串口（function 级）。"""
+    serial_ports = _load_serial_ports()
+    reason = _serial_skip_reason(serial_ports)
+    if reason:
+        pytest.skip(reason)
+    if serial_manager is None:
+        pytest.skip("串口管理器不可用")
+
+    target = [c for c in serial_ports if c.get("purpose") == "control"]
+    if not target:
+        pytest.skip("未配置 purpose=control 的串口")
+    config = target[0]
+    try:
+        port_obj = serial_manager.get(config["port"])
+    except SerialConnectError as exc:
+        pytest.skip(f"控制串口 [{config['name']}] 连接失败：{exc}")
+
+    port = config["port"]
+    _register_serial_port(port, port_obj)
+    try:
+        yield port_obj
+    finally:
+        _unregister_serial_port(port)
+
+
+@pytest.fixture
+def serial_log_port(request, serial_manager):
+    """按 purpose=log 选取日志采集串口（function 级）。"""
+    serial_ports = _load_serial_ports()
+    reason = _serial_skip_reason(serial_ports)
+    if reason:
+        pytest.skip(reason)
+    if serial_manager is None:
+        pytest.skip("串口管理器不可用")
+
+    target = [c for c in serial_ports if c.get("purpose") == "log"]
+    if not target:
+        pytest.skip("未配置 purpose=log 的串口")
+    config = target[0]
+    try:
+        port_obj = serial_manager.get(config["port"])
+    except SerialConnectError as exc:
+        pytest.skip(f"日志串口 [{config['name']}] 连接失败：{exc}")
+
+    port = config["port"]
+    _register_serial_port(port, port_obj)
+    try:
+        yield port_obj
+    finally:
+        _unregister_serial_port(port)

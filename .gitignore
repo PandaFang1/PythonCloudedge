@@ -5,13 +5,12 @@ __pycache__/
 *.log
 
 # 日志目录
-operater_logs/
+logs/
 config/Execution.log
 
 # 测试生成物
 reports/
 allure-results/
-serial_logs/
 
 # IDE
 .idea/
