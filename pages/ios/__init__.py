@@ -5,5 +5,7 @@
 """
 
 from pages.ios.main_page import YunjiMainPage
+from pages.ios.message_page import YunjiMessagePage
+from pages.ios.my_page import YunjiMyPage
 
-__all__ = ["YunjiMainPage"]
+__all__ = ["YunjiMainPage", "YunjiMessagePage", "YunjiMyPage"]

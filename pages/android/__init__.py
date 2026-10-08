@@ -5,5 +5,7 @@
 """
 
 from pages.android.main_page import CloudEdgeMainPage
+from pages.android.message_page import CloudEdgeMessagePage
+from pages.android.my_page import CloudEdgeMyPage
 
-__all__ = ["CloudEdgeMainPage"]
+__all__ = ["CloudEdgeMainPage", "CloudEdgeMessagePage", "CloudEdgeMyPage"]

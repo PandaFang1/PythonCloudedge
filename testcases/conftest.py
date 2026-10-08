@@ -139,8 +139,8 @@ def poco_driver(platform, airtest_device):
             screenshot_each_action=False,
         )
 
-    from poco.drivers.ios.uiautomation import IOSUiautomationPoco
-    return IOSUiautomationPoco(device=airtest_device)
+    from poco.drivers.ios import iosPoco
+    return iosPoco(device=airtest_device)
 
 
 @pytest.fixture

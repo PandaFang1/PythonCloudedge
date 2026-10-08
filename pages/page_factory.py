@@ -13,9 +13,9 @@
 
 from typing import Dict, Tuple, Type
 
-from pages.android import CloudEdgeMainPage
+from pages.android import CloudEdgeMainPage, CloudEdgeMessagePage, CloudEdgeMyPage
 from pages.base_page import BasePage
-from pages.ios import YunjiMainPage
+from pages.ios import YunjiMainPage, YunjiMessagePage, YunjiMyPage
 from utils.log_utils import get_logger
 
 logger = get_logger()
@@ -24,6 +24,10 @@ logger = get_logger()
 REGISTRY: Dict[Tuple[str, str], Type[BasePage]] = {
     ("android", "main_page"): CloudEdgeMainPage,
     ("ios", "main_page"): YunjiMainPage,
+    ("android", "my_page"): CloudEdgeMyPage,
+    ("ios", "my_page"): YunjiMyPage,
+    ("android", "message_page"): CloudEdgeMessagePage,
+    ("ios", "message_page"): YunjiMessagePage,
 }
 
 

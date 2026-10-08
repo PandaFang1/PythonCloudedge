@@ -186,6 +186,20 @@ class BasePage:
 
     # ==================== 基础元素操作 ====================
 
+    def _resolve_locator(self, locator):
+        """将定位器解析为 poco UI 对象。
+
+        poco 的选择器 API 要求属性以关键字参数传入（如 poco(text="登录")），
+        不支持 poco({"text": "登录"}) 的 dict 传参，因此此处统一转换。
+
+        :param locator: 元素定位器（str 名称或 dict，如 {"text": "登录"}、
+                        {"name": "com.xxx:id/btn"}）
+        :return: UIObjectProxy 元素对象
+        """
+        if isinstance(locator, dict):
+            return self.poco(**locator)
+        return self.poco(locator)
+
     def find(self, locator, timeout: Optional[float] = None):
         """查找元素并返回 poco UI 对象。
 
@@ -195,7 +209,7 @@ class BasePage:
         :raises ElementNotFoundError: 元素超时未出现时抛出
         """
         timeout = timeout or DEFAULT_TIMEOUT
-        element = self.poco(locator)
+        element = self._resolve_locator(locator)
 
         if not element.wait(timeout=timeout):
             msg = f"元素 [{locator}] 在 {timeout}s 内未出现"
@@ -211,7 +225,7 @@ class BasePage:
         :param locator: 元素定位器
         :return: 存在返回 True
         """
-        return self.poco(locator).exists()
+        return self._resolve_locator(locator).exists()
 
     def wait_for_element(self, locator, timeout: Optional[float] = None) -> bool:
         """等待元素出现。
@@ -221,7 +235,7 @@ class BasePage:
         :return: 超时时间内出现返回 True，否则 False（不抛异常）
         """
         timeout = timeout or DEFAULT_TIMEOUT
-        result = self.poco(locator).wait(timeout=timeout)
+        result = self._resolve_locator(locator).wait(timeout=timeout)
         if result:
             logger.debug(f"元素 [{locator}] 已出现（等待 <= {timeout}s）")
         else:
