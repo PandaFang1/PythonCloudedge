@@ -26,9 +26,13 @@ PO_PythonProject/
 │   ├── base_page.py              # [共用] 基类：元素操作 + app 生命周期
 │   ├── page_factory.py           # [共用] 页面工厂：按 (平台, 页面名) 分发页面类
 │   ├── android/                  # Android 平台页面包（CloudEdge）
-│   │   └── main_page.py          #   主页面：定位器 + 业务方法
+│   │   ├── main_page.py          #   首页：识别点 + Tab 导航
+│   │   ├── message_page.py       #   消息页：报警/分享 Tab
+│   │   └── my_page.py            #   我的页：二维码/反馈 + 功能入口
 │   └── ios/                      # iOS 平台页面包（云际）
-│       └── main_page.py          #   主页面：与安卓端同名接口
+│       ├── main_page.py          #   首页：与安卓端同名接口
+│       ├── message_page.py       #   消息页：与安卓端同名接口
+│       └── my_page.py            #   我的页：与安卓端同名接口
 ├── testcases/                    # 测试用例层
 │   ├── conftest.py               # 核心 fixtures：--platform 选项、设备连接、
 │   │                             #   poco 驱动、app 生命周期、失败截图钩子
@@ -55,6 +59,23 @@ PO_PythonProject/
 └── README.md                     # 本文档
 ```
 
+## 页面识别与导航（双端真机验证）
+
+框架已覆盖产品三大核心页面，双端定位器均来自真机验证，详细对照表见
+[页面识别文档](docs/guide/page-identification.md)：
+
+| 页面 | 工厂页面名 | Android 识别点（CloudEdge） | iOS 识别点（云际） |
+|---|---|---|---|
+| 首页 | `main_page` | `ivAddDevice` + `ivMenu` | `nav home add` + `nav home menu` |
+| 消息页 | `message_page` | 顶部 Tab「报警」+「分享」 | 顶部 Tab「报警」+「分享」（name 属性） |
+| 我的页 | `my_page` | `iv_qr_code` + `feedback` | `img me qrcode` + `img me scan` |
+
+- **底部 Tab 导航**：首页 ⇄ 消息页、首页 ⇄ 我的页，双端业务方法同名
+  （`open_home_page` / `open_message_page` / `open_my_page`）
+- **双端定位器差异**：Android 文本用 `{"text": "xxx"}`、控件 ID 用
+  `{"name": "com.cloudedge.smarteye:id/xxx"}`；iOS 文本统一挂在可访问性标签上，
+  用 `{"name": "xxx"}` 定位
+
 ## 文档导航
 
 ### 快速上手
@@ -67,6 +88,7 @@ PO_PythonProject/
 
 - [架构说明](docs/architecture/overview.md) — 分层设计、fixture 依赖链、双端差异处理
 - [扩展指南](docs/guide/extension.md) — 新增页面、新增共用用例
+- [页面识别文档](docs/guide/page-identification.md) — 三大页面双端识别点与定位器速查
 - [串口测试](docs/guide/serial.md) — 串口 fixture、用例编写、运行
 
 ### 开发与执行规则
