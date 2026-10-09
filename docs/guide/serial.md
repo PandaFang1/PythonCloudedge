@@ -52,7 +52,7 @@ python run.py --pytest-args "-m serial"  # 通过 run.py 运行串口用例
 
 ## 文档导航
 
-- 上一篇：[扩展指南 ←](./extension.md)
+- 上一篇：[页面识别文档 ←](./page-identification.md)
 - 下一篇：[代码规范 →](../rules/coding.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

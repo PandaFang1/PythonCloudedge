@@ -54,6 +54,6 @@ def test_login(app_page, platform):
 ## 文档导航
 
 - 上一篇：[架构说明 ←](../architecture/overview.md)
-- 下一篇：[串口测试 →](./serial.md)
+- 下一篇：[页面识别文档 →](./page-identification.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

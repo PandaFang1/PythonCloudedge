@@ -31,11 +31,12 @@ docs/
 3. [快速开始](./getting-started/quickstart.md)
 4. [架构说明](./architecture/overview.md)
 5. [扩展指南](./guide/extension.md)
-6. [代码规范](./rules/coding.md) — 写代码前必读
-7. [用例编写规则](./rules/testcase.md) — 写用例前必读
-8. [执行规则](./rules/execution.md) — 运行前必读
-9. [串口测试](./guide/serial.md)（按需）
-10. [FAQ](./faq.md)（按需）
+6. [页面识别文档](./guide/page-identification.md)（编写页面对象 / 维护定位器前必读）
+7. [代码规范](./rules/coding.md) — 写代码前必读
+8. [用例编写规则](./rules/testcase.md) — 写用例前必读
+9. [执行规则](./rules/execution.md) — 运行前必读
+10. [串口测试](./guide/serial.md)（按需）
+11. [FAQ](./faq.md)（按需）
 
 ## 文档导航
 
