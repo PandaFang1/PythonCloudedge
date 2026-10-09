@@ -1,0 +1,181 @@
+"""安卓端特有用例：智能门铃 + Chime Base 端到端添加流程。
+
+业务背景：
+    从首页「添加设备」入口进入「选择设备类别」页，选择「智能门铃 → Chime Base」，
+    走完整配网流程：
+        1. 安装位置指引 → 2. 接入电源指引 →
+        3. 在搜到的设备中按 SN 选择 →
+        4. 等待 WiFi 搜索完成 → 5. 输入 SSID + 密码 →
+        6. 比对 WiFi 信息弹框 → 7. 等待连接网络 →
+        8. 连接成功「下一步」→「完成」 → 9. 安装指引「下一步」 →
+        10. 网络诊断「返回首页」+ 断言首页含 SN
+
+前置条件：同登录用例（pm clear、预授权 11 项权限、禁用 autofill）
+
+硬件依赖：
+    - **真实 Chime Base 设备**：已上电且处于配对态（蓝牙/WiFi 可见）
+    - **真实 WiFi 网络**：`xiaoMI-楼顶拷机IPC` / `56565099`（可在 run() 覆盖）
+    - **设备 SN 已知**：`131903239`（默认）
+
+默认 skip：
+    - 本用例需要物理硬件，默认 `pytest.mark.skipif` 跳过整套
+    - 但 Flow/工厂/PO 模块本身可被单测（`tests/test_device_flow_factory.py`）验证
+    - 真机调试时可手动取消 skip
+
+运行方式：
+    pytest testcases/android/test_add_doorbell_chime_base.py --platform android
+"""
+
+import time
+
+import allure
+import pytest
+
+from pages.android.main_page import CloudEdgeMainPage
+from pages.android.add_device_flow import (
+    DEFAULT_DEVICE_SN,
+    DEFAULT_WIFI_PASSWORD,
+    DEFAULT_WIFI_SSID,
+)
+from pages.android.add_device_flow.doorbell_chime_base_flow import (
+    DoorbellChimeBaseFlow,
+)
+from pages.page_factory import PageFactory
+from testcases.android.test_add_device import _open_category_page
+from testcases.android.test_login_region import RUNTIME_PERMISSIONS
+from testcases.android.test_login_region import _wait_for_main_activity
+
+ACCOUNT = "358632847@qq.com"
+PASSWORD = "82102353qweR"
+REGION = "美国"
+
+# 真实设备是否就绪：通过环境变量 / 真机调试时手动改为 True
+# 也可通过 pytest -k 命令单独控制：
+#   pytest -k chime_base --override-ini "markers="  (取消 skip)
+HARDWARE_READY = False
+
+
+@pytest.mark.android
+@allure.epic("设备")
+@allure.feature("添加设备")
+@allure.story("智能门铃 Chime Base 端到端")
+@allure.severity(allure.severity_level.CRITICAL)
+@allure.title("智能门铃 Chime Base 端到端配网（需真实 Chime Base 设备）")
+@pytest.mark.skipif(
+    not HARDWARE_READY,
+    reason=(
+        "需要真实 Chime Base 设备已上电并处于配对态，"
+        "以及真实 WiFi（默认 xiaoMI-楼顶拷机IPC / 56565099）"
+        "将 HARDWARE_READY 设为 True 启用本用例"
+    ),
+)
+def test_add_doorbell_chime_base(
+    platform, poco_driver, device_info,
+    sn=DEFAULT_DEVICE_SN,
+    ssid=DEFAULT_WIFI_SSID,
+    wifi_password=DEFAULT_WIFI_PASSWORD,
+):
+    """端到端添加智能门铃 Chime Base。
+
+    :param sn: 设备 SN（默认 `131903239`）
+    :param ssid: WiFi SSID（默认 `xiaoMI-楼顶拷机IPC`）
+    :param wifi_password: WiFi 密码（默认 `56565099`）
+    """
+    if platform != "android":
+        pytest.skip("仅适用于 Android（CloudEdge）")
+
+    allure.dynamic.tag(platform)
+    allure.dynamic.parameter("device", device_info.user_name)
+    allure.dynamic.parameter("sn", sn)
+    allure.dynamic.parameter("ssid", ssid)
+
+    login_page = PageFactory.create(
+        platform, "login_page", poco=poco_driver, udid=device_info.udid
+    )
+    main_page = CloudEdgeMainPage(poco=poco_driver, udid=device_info.udid)
+    add_device_page = PageFactory.create(
+        platform, "add_device_category_page", poco=poco_driver, udid=device_info.udid
+    )
+
+    original_autofill = ""
+    try:
+        with allure.step("前置：清除 app 数据 + 预授权 + 禁用 autofill"):
+            login_page._run_device_command(
+                ["adb", "-s", device_info.udid, "shell", "pm", "clear",
+                 device_info.app_package],
+                timeout=15,
+            )
+            time.sleep(2.0)
+            for permission in RUNTIME_PERMISSIONS:
+                login_page._run_device_command(
+                    ["adb", "-s", device_info.udid, "shell", "pm", "grant",
+                     device_info.app_package, permission],
+                    timeout=5,
+                )
+            original_autofill = login_page._run_device_command(
+                ["adb", "-s", device_info.udid, "shell",
+                 "settings", "get", "secure", "autofill_service"],
+                timeout=5,
+            ).strip()
+            login_page._run_device_command(
+                ["adb", "-s", device_info.udid, "shell",
+                 "settings", "put", "secure", "autofill_service", "null"],
+                timeout=5,
+            )
+
+        with allure.step("登录账号（选国家「美国」）"):
+            login_page.start_app(device_info.app_package)
+            assert login_page.wait_for_page_loaded(timeout=30), \
+                "[android] 未进入登录页"
+            login_page.login_with_region(
+                region_text=REGION, account=ACCOUNT, password=PASSWORD,
+                remember_password=True,
+            )
+            assert _wait_for_main_activity(login_page, timeout=60), (
+                f"[android] 登录后未进入 MainActivity（当前="
+                f"{login_page.get_current_activity().strip()}）"
+            )
+
+        with allure.step("主页 → 添加设备 → 「智能门铃 → Chime Base」→ 获取 Flow"):
+            _open_category_page(login_page, main_page, add_device_page)
+            flow = add_device_page.start_flow(
+                category_name="智能门铃",
+                type_name="Chime Base",
+            )
+            assert isinstance(flow, DoorbellChimeBaseFlow), (
+                f"[android] 工厂分发结果类型错误：{type(flow).__name__}"
+            )
+            allure.attach(
+                str(flow.describe()),
+                name="Flow 实例信息",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+
+        with allure.step("端到端配网（9 步）"):
+            flow.run(
+                sn=sn,
+                ssid=ssid,
+                password=wifi_password,
+                timeout=30.0,
+                timeout_loading=30.0,
+                timeout_connecting=90.0,
+            )
+
+        with allure.step("断言：主页设备列表含 SN"):
+            devices = main_page.get_device_list()
+            assert sn in devices, (
+                f"[android] 主页设备列表应含 SN={sn!r}，实际：{devices}"
+            )
+    finally:
+        try:
+            if original_autofill and original_autofill != "null":
+                login_page._run_device_command(
+                    ["adb", "-s", device_info.udid, "shell",
+                     "settings", "put", "secure", "autofill_service",
+                     original_autofill],
+                    timeout=5,
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[警告] 还原 autofill 服务失败：{exc}")
+        with allure.step("关闭 CloudEdge"):
+            login_page.stop_app(device_info.app_package)
