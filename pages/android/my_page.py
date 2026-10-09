@@ -30,6 +30,9 @@ class CloudEdgeMyPage(BasePage):
     ITEM_ALBUM = {"text": "相册"}
     ITEM_SETTINGS = {"text": "设置"}
 
+    # 账号信息入口（跳转「我的信息」页：账号设置 + 退出登录）
+    BTN_ACCOUNT = {"name": "com.cloudedge.smarteye:id/tv_account"}
+
     def __init__(self, poco, udid: str = ""):
         """
         :param poco: AndroidUiautomationPoco 驱动实例
@@ -81,3 +84,15 @@ class CloudEdgeMyPage(BasePage):
     def open_settings(self) -> None:
         """点击「设置」入口。"""
         self.click(self.ITEM_SETTINGS)
+
+    def open_account_page(self) -> None:
+        """点击账号入口（tv_account），跳转「我的信息」页（账号设置 + 退出登录）。"""
+        self.click(self.BTN_ACCOUNT)
+        logger.info("已点击账号入口，跳转「我的信息」页")
+
+    def get_account(self) -> str:
+        """获取「我的」页顶部显示的账号文本（如 `ceshi011@qq.com`）。
+
+        :return: 账号文本；未渲染时返回空串
+        """
+        return self.get_text(self.BTN_ACCOUNT)

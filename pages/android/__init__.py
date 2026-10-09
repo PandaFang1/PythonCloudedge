@@ -4,8 +4,18 @@
 与 pages/ios 包中的页面类实现相同业务接口，供 PageFactory 按平台分发。
 """
 
+from pages.android.account_page import CloudEdgeAccountPage
+from pages.android.add_device_category_page import CloudEdgeAddDeviceCategoryPage
+from pages.android.login_page import CloudEdgeLoginPage
 from pages.android.main_page import CloudEdgeMainPage
 from pages.android.message_page import CloudEdgeMessagePage
 from pages.android.my_page import CloudEdgeMyPage
 
-__all__ = ["CloudEdgeMainPage", "CloudEdgeMessagePage", "CloudEdgeMyPage"]
+__all__ = [
+    "CloudEdgeAccountPage",
+    "CloudEdgeAddDeviceCategoryPage",
+    "CloudEdgeLoginPage",
+    "CloudEdgeMainPage",
+    "CloudEdgeMessagePage",
+    "CloudEdgeMyPage",
+]

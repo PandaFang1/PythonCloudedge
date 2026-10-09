@@ -14,6 +14,10 @@ docs/
 │   └── overview.md           # 架构说明
 ├── guide/
 │   ├── extension.md          # 扩展指南
+│   ├── page-identification.md # 页面识别（核心页面 + 登录页定位器速查）
+│   ├── login-page.md         # 登录页与国家/区域选择页（ADBKeyboard 中文搜索）
+│   ├── account-page.md       # 我的信息页（退出登录 + 确认弹窗）
+│   ├── add-device-category-page.md # 选择设备类别页（按类别/蓝牙两种方式 + 查看更多）
 │   └── serial.md             # 串口测试
 ├── rules/
 │   ├── coding.md             # 代码规范
@@ -32,11 +36,14 @@ docs/
 4. [架构说明](./architecture/overview.md)
 5. [扩展指南](./guide/extension.md)
 6. [页面识别文档](./guide/page-identification.md)（编写页面对象 / 维护定位器前必读）
-7. [代码规范](./rules/coding.md) — 写代码前必读
-8. [用例编写规则](./rules/testcase.md) — 写用例前必读
-9. [执行规则](./rules/execution.md) — 运行前必读
-10. [串口测试](./guide/serial.md)（按需）
-11. [FAQ](./faq.md)（按需）
+7. [登录页文档](./guide/login-page.md)（登录页与国家/区域选择页，ADBKeyboard 中文搜索方案）
+8. [我的信息页文档](./guide/account-page.md)（退出登录与确认弹窗）
+9. [选择设备类别页文档](./guide/add-device-category-page.md)（按类别 / 蓝牙两种添加方式 + 查看更多抽屉）
+10. [代码规范](./rules/coding.md) — 写代码前必读
+11. [用例编写规则](./rules/testcase.md) — 写用例前必读
+12. [执行规则](./rules/execution.md) — 运行前必读
+13. [串口测试](./guide/serial.md)（按需）
+14. [FAQ](./faq.md)（按需）
 
 ## 文档导航
 

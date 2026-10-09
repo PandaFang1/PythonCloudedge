@@ -1,5 +1,13 @@
 devices:
   # ========== 安卓设备 ==========
+  # 用户0：当前测试连接的设备（运行用例前请确认 adb devices 中可见）
+  - user_name: "当前测试机"
+    phone_model: "Redmi 22101317C"
+    platform: Android
+    udid: "cfed8c100822"
+    app_package: "com.cloudedge.smarteye"
+
+  # ========== 安卓设备 ==========
   # 用户1：一台安卓真机
   - user_name: "肥猪阿熊"
     phone_model: "Redmi Note 11 5G"

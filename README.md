@@ -26,9 +26,12 @@ PO_PythonProject/
 │   ├── base_page.py              # [共用] 基类：元素操作 + app 生命周期
 │   ├── page_factory.py           # [共用] 页面工厂：按 (平台, 页面名) 分发页面类
 │   ├── android/                  # Android 平台页面包（CloudEdge）
-│   │   ├── main_page.py          #   首页：识别点 + Tab 导航
+│   │   ├── main_page.py          #   首页：识别点 + Tab 导航 + 添加设备弹窗
 │   │   ├── message_page.py       #   消息页：报警/分享 Tab
-│   │   └── my_page.py            #   我的页：二维码/反馈 + 功能入口
+│   │   ├── my_page.py            #   我的页：二维码/反馈 + 功能入口
+│   │   ├── login_page.py         #   登录页：国家/区域选择（ADBKeyboard）+ 登录
+│   │   ├── account_page.py       #   我的信息页：账号资料 + 退出登录
+│   │   └── add_device_category_page.py # 选择设备类别页：按类别/蓝牙两种添加方式
 │   └── ios/                      # iOS 平台页面包（云际）
 │       ├── main_page.py          #   首页：与安卓端同名接口
 │       ├── message_page.py       #   消息页：与安卓端同名接口
@@ -70,6 +73,31 @@ PO_PythonProject/
 | 消息页 | `message_page` | 顶部 Tab「报警」+「分享」 | 顶部 Tab「报警」+「分享」（name 属性） |
 | 我的页 | `my_page` | `iv_qr_code` + `feedback` | `img me qrcode` + `img me scan` |
 
+Android 端另覆盖 **登录页** 与其内嵌的 **国家/区域选择页**（不单独注册工厂，
+定位器与 ADBKeyboard 中文搜索方案详见
+[登录页文档](docs/guide/login-page.md)）：
+
+| 页面 | Android 识别点（CloudEdge） | 说明 |
+|---|---|---|
+| 登录页 | `et_account` + `et_password` | 一站式登录入口 `login_with_region(...)`：选国家 → 勾选记住密码 → 输入账号密码 → 登录 |
+| 国家/区域选择页 | `et_region_search`（弹出页） | ADBKeyboard 输入中文（如「美国」）过滤列表后点击目标国家返回登录页 |
+
+Android 端另覆盖 **我的信息页**（「我的」页点击 `tv_account` 进入，
+退出登录与确认弹窗详见
+[我的信息页文档](docs/guide/account-page.md)）：
+
+| 页面 | Android 识别点（CloudEdge） | 说明 |
+|---|---|---|
+| 我的信息页 | `tv_title`（我的信息）+ `logout_layout`（退出登录） | 一站式退出 `logout(confirm=True/False)`：底部「退出登录」→ 弹窗「确定 / 取消」→ 回登录页 / 停留本页 |
+
+Android 端另覆盖 **选择设备类别页**（首页 `ivAddDevice` → 弹窗「添加设备」，
+按类别 / 蓝牙两种添加方式详见
+[选择设备类别页文档](docs/guide/add-device-category-page.md)）：
+
+| 页面 | Android 识别点（CloudEdge） | 说明 |
+|---|---|---|
+| 选择设备类别页 | `tv_title`（选择设备类别）+ `recyclerview_main`（左侧分类） | 方式 A：左侧 `tv_category_name` + 右侧 `tv_device_name`；方式 B：顶部 `rv_devices` 蓝牙列表 + 「查看更多」弹出 `design_bottom_sheet` 抽屉 |
+
 - **底部 Tab 导航**：首页 ⇄ 消息页、首页 ⇄ 我的页，双端业务方法同名
   （`open_home_page` / `open_message_page` / `open_my_page`）
 - **双端定位器差异**：Android 文本用 `{"text": "xxx"}`、控件 ID 用
@@ -89,6 +117,12 @@ PO_PythonProject/
 - [架构说明](docs/architecture/overview.md) — 分层设计、fixture 依赖链、双端差异处理
 - [扩展指南](docs/guide/extension.md) — 新增页面、新增共用用例
 - [页面识别文档](docs/guide/page-identification.md) — 三大页面双端识别点与定位器速查
+- [登录页文档](docs/guide/login-page.md) — 登录页与国家/区域选择页（Android）：定位器、
+  ADBKeyboard 中文搜索、`login_with_region` 一站式登录
+- [我的信息页文档](docs/guide/account-page.md) — 我的信息页（Android）：账号资料、
+  退出登录确认弹窗、`logout` 一站式退出
+- [选择设备类别页文档](docs/guide/add-device-category-page.md) — 选择设备类别页
+  （Android）：按类别 / 蓝牙两种添加方式 + 「查看更多」BottomSheet
 - [串口测试](docs/guide/serial.md) — 串口 fixture、用例编写、运行
 
 ### 开发与执行规则

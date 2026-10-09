@@ -13,7 +13,14 @@
 
 from typing import Dict, Tuple, Type
 
-from pages.android import CloudEdgeMainPage, CloudEdgeMessagePage, CloudEdgeMyPage
+from pages.android import (
+    CloudEdgeAccountPage,
+    CloudEdgeAddDeviceCategoryPage,
+    CloudEdgeLoginPage,
+    CloudEdgeMainPage,
+    CloudEdgeMessagePage,
+    CloudEdgeMyPage,
+)
 from pages.base_page import BasePage
 from pages.ios import YunjiMainPage, YunjiMessagePage, YunjiMyPage
 from utils.log_utils import get_logger
@@ -22,6 +29,9 @@ logger = get_logger()
 
 # 页面注册表：key 为 (平台, 页面名)，value 为页面类
 REGISTRY: Dict[Tuple[str, str], Type[BasePage]] = {
+    ("android", "login_page"): CloudEdgeLoginPage,
+    ("android", "account_page"): CloudEdgeAccountPage,
+    ("android", "add_device_category_page"): CloudEdgeAddDeviceCategoryPage,
     ("android", "main_page"): CloudEdgeMainPage,
     ("ios", "main_page"): YunjiMainPage,
     ("android", "my_page"): CloudEdgeMyPage,

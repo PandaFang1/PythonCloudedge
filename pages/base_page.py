@@ -353,3 +353,54 @@ class BasePage:
         """
         self.poco.swipe([0.2, 0.5], [0.8, 0.5], duration=duration)
         logger.debug("已向右滑动")
+
+    # ==================== 系统按键 ====================
+
+    def press_back(self) -> None:
+        """按下系统返回键（KEYCODE_BACK = 4）。
+
+        通过 adb shell input keyevent 实现，不依赖 poco 屏幕快照，
+        适合处理 MIUI 自动填充等系统级弹窗。
+        """
+        if self.platform == "android":
+            args = ["adb"]
+            if self.udid:
+                args += ["-s", self.udid]
+            args += ["shell", "input", "keyevent", "4"]
+            self._run_device_command(args, timeout=5)
+        else:
+            # iOS 端没有全局 BACK 键，由各页面单独实现 dismiss 逻辑
+            logger.debug("iOS 端无系统返回键，请使用页面级 dismiss 方法")
+        logger.debug("已按下系统返回键")
+
+    def get_current_activity(self) -> str:
+        """获取设备当前前台 Activity 全名（Android 专用）。
+
+        通过 `dumpsys activity activities | grep topResumedActivity` 解析，
+        返回形如 `com.pkg/.MainActivity` 的字符串。
+
+        :return: Activity 全名；获取失败返回空字符串
+        """
+        if self.platform != "android":
+            logger.debug("get_current_activity 仅支持 Android")
+            return ""
+
+        import re
+
+        args = ["adb"]
+        if self.udid:
+            args += ["-s", self.udid]
+        args += ["shell", "dumpsys", "activity", "activities"]
+        try:
+            output = self._run_device_command(args, timeout=10)
+        except OperationFailedError as exc:
+            logger.warning(f"获取当前 Activity 失败：{exc}")
+            return ""
+
+        matched = re.search(r"topResumedActivity=ActivityRecord\{\w+ \w+ (\S+)", output)
+        if matched:
+            activity = matched.group(1)
+            logger.debug(f"当前前台 Activity：{activity}")
+            return activity
+        logger.warning(f"topResumedActivity 未匹配到，原始输出片段：{output[:200]}")
+        return ""

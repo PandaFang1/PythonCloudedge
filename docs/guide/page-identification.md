@@ -11,6 +11,9 @@
 
 | 页面名 | Android 页面类 | iOS 页面类 | 工厂 key |
 |---|---|---|---|
+| 登录页 | `CloudEdgeLoginPage` | _(待实现)_ | `(android, "login_page")` |
+| 我的信息页（退出登录） | `CloudEdgeAccountPage` | _(待实现)_ | `(android, "account_page")` |
+| 选择设备类别页 | `CloudEdgeAddDeviceCategoryPage` | _(待实现)_ | `(android, "add_device_category_page")` |
 | 首页 | `CloudEdgeMainPage` | `YunjiMainPage` | `(platform, "main_page")` |
 | 消息页 | `CloudEdgeMessagePage` | `YunjiMessagePage` | `(platform, "message_page")` |
 | 我的页 | `CloudEdgeMyPage` | `YunjiMyPage` | `(platform, "my_page")` |
@@ -127,6 +130,8 @@
 | `is_my_page()` | 双识别点同时存在返回 True |
 | `is_item_visible(locator)` | 判断指定功能入口是否可见 |
 | `open_settings()` | 点击「设置」入口 |
+| `open_account_page()` | 点击账号入口 `tv_account`，跳转[我的信息页](./account-page.md) |
+| `get_account()` | 读取「我的」页顶部显示的账号文本（账号切换验证用） |
 
 ### iOS 特有说明
 
@@ -152,6 +157,71 @@
 （`test_switch_to_message_and_back` / `test_switch_to_my_and_back`），
 双端真机验证结果：8/8 通过（Android 4 + iOS 4）。
 
+---
+
+## 附：登录页
+
+登录页是 app 首启 / 退出登录后的入口页面，Android 端识别点与控件详见
+[登录页文档](./login-page.md)。
+
+### 页面识别点
+
+| 平台 | 识别点 1（账号输入框） | 识别点 2（密码输入框） |
+|---|---|---|
+| Android | `{"name": "com.cloudedge.smarteye:id/et_account"}` | `{"name": "com.cloudedge.smarteye:id/et_password"}` |
+| iOS | _(待补齐)_ | _(待补齐)_ |
+
+两个识别点必须**同时存在**才判定为登录页。
+
+### 国家/地区选择（Android 端要点）
+
+- 进入路径：点击登录页 `et_account` 上方的国家容器
+  `{"name": "com.cloudedge.smarteye:id/layout_region"}`
+- 搜索框：`{"name": "com.cloudedge.smarteye:id/et_region_search"}`（该页判定标志）
+- 列表项：`{"name": "com.cloudedge.smarteye:id/tv_city"}`（中文国家名，如「中国」「美国」）
+- **已实现方法**（`CloudEdgeLoginPage`，详见
+  [登录页文档 §4.1](./login-page.md#41-国家区域选择--adbkeyboard-输入新增)）：
+  - `open_region_picker()` — 进入国家/地区选择页
+  - `search_region_via_adb_keyboard("美国")` — ADBKeyboard 输入中文并过滤列表
+  - `select_region("美国")` — 点击目标国家并断言返回登录页
+  - `login_with_region(...)` — 选国家 + 登录一站式入口
+- **重要**：adb 自动化下输入中文需走 [登录页文档 §5](./login-page.md#5-中文搜索支持方案国家地区选择)，
+  本机（小米 / Android 14）仅安装搜狗输入法，`adb shell input text "美国"` 会抛
+  `NullPointerException`；项目已采用 **ADBKeyboard 方案**（已实现并真机验证）
+
+### 入口
+
+- app 首启未登录时自动进入登录页
+- 从「我的」页退出登录后返回登录页
+
+### 附：我的信息页（account_page，退出登录入口）
+
+「我的」页点击账号入口 `tv_account` 后进入「我的信息」页
+（`MyInformationActivity`），底部「退出登录」按钮（`logout_layout`）点击后
+弹出确认弹窗（`message` 提示「退出后不会删除任何历史数据…」，
+`negativeButton`「取消」/ `positiveButton`「确定」）。
+识别点、定位器与 `logout()` 一站式方法详见
+[我的信息页文档](./account-page.md)。
+
+### 附：选择设备类别页（add_device_category_page，添加设备入口）
+
+首页点击右上「添加设备」(`ivAddDevice`) 唤出弹窗（扫一扫 / 添加设备），
+点击「添加设备」条目后进入「选择设备类别」页
+（`com.dctrain.module_add_device.view.AddSeriesTypeActivity`）。
+
+两种添加方式：
+- **方式 A（按类别）**：左侧 `recyclerview_main` 选择分类（如「电池摄像机」），
+  右侧 `recyclerview_detail` 选择具体类型，进入配网/开机说明页（`PowerOnActivity`）
+- **方式 B（蓝牙）**：顶部 `ll_bt` 区域展示搜索结果；超过显示数量时第 6 个
+  槽位显示「查看更多」，点击弹出 `BottomSheet`（`design_bottom_sheet`）
+  显示完整设备列表
+
+识别点、定位器与业务方法详见
+[选择设备类别页文档](./add-device-category-page.md)。
+
+> iOS 端 `YunjiLoginPage` 待补齐，补齐后需更新本页表格并完善 [登录页文档](./login-page.md)
+> 中的双端对比小节。
+
 ## 附：新增页面时的定位器采集方法
 
 1. **Android**：连接设备后通过 `poco.dump()` 或 `adb shell uiautomator dump` 获取控件树，
@@ -165,6 +235,6 @@
 ## 文档导航
 
 - 上一篇：[扩展指南 ←](./extension.md)
-- 下一篇：[串口测试 →](./serial.md)
+- 下一篇：[登录页 →](./login-page.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

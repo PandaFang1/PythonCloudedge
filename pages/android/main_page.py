@@ -10,7 +10,9 @@
 - 主页面识别点（ivAddDevice / ivMenu）已通过真机验证
 """
 
-from pages.base_page import BasePage
+import time
+
+from pages.base_page import BasePage, ElementNotFoundError
 from utils.log_utils import get_logger
 
 logger = get_logger()
@@ -44,6 +46,29 @@ class CloudEdgeMainPage(BasePage):
     def handle_popups(self) -> None:
         """处理首启弹窗（跳过欢迎页/隐私政策等），进入主界面。"""
         self.click_if_exists(self.BTN_SKIP)
+
+    def get_device_list(self) -> list:
+        """获取首页设备列表中所有可见设备的 SN / 名称。
+
+        真机 poco dump 后需替换 `rv_device_list` 与 `tv_device_name` 的
+        resource-id；当前为占位符，匹配失败时返回空列表（不抛异常）。
+        设备未添加成功时通常列表为空。
+
+        :return: 设备 SN / 名称列表
+        """
+        RV_DEVICE_LIST = {"name": "com.cloudedge.smarteye:id/rv_device_list"}
+        TV_DEVICE_NAME = {"name": "com.cloudedge.smarteye:id/tv_device_name"}
+        if not self.exists(RV_DEVICE_LIST):
+            logger.debug("首页设备列表容器未找到（可能无设备或资源 id 待替换）")
+            return []
+        result: list = []
+        for item in self.poco(**RV_DEVICE_LIST).children():
+            name_node = item.offspring(TV_DEVICE_NAME["name"])
+            if name_node.exists():
+                text = name_node.attr("text")
+                if text:
+                    result.append(text)
+        return result
 
     def wait_for_page_loaded(self, timeout: float = 20.0) -> bool:
         """等待主页面加载完成（以「添加设备」+「菜单」按钮同时出现为识别点）。
@@ -98,3 +123,38 @@ class CloudEdgeMainPage(BasePage):
         """切换回「首页」页面。"""
         self.click(self.TAB_HOME)
         self.wait_for_element(self.TAB_HOME)
+
+    # ---------------- 添加设备弹窗（ivAddDevice 唤出）----------------
+
+    # 弹窗条目（`tvName` 文本=「扫一扫」/「添加设备」）
+    POPUP_ITEM_ADD_DEVICE = "添加设备"
+    POPUP_ITEM_SCAN = "扫一扫"
+
+    def open_add_device_menu(self, wait_seconds: float = 0.8) -> None:
+        """点击右上「添加设备」按钮，唤出弹窗（扫一扫 / 添加设备）。
+
+        弹窗元素约 0.5s 内渲染完成，默认等待 0.8s 后再操作。
+
+        :param wait_seconds: 唤起弹窗后等待渲染时间（秒）
+        """
+        self.click(self.BTN_ADD_DEVICE)
+        time.sleep(wait_seconds)
+        logger.info("已唤起「添加设备」弹窗")
+
+    def click_add_device_popup_item(self, item_text: str) -> None:
+        """点击添加设备弹窗中的指定条目。
+
+        :param item_text: 条目文本，如「扫一扫」/「添加设备」
+        """
+        target = self.poco("com.cloudedge.smarteye:id/tvName", text=item_text)
+        if not target.exists():
+            raise ElementNotFoundError(
+                f"添加设备弹窗中未找到条目「{item_text}」，请确认弹窗已唤起"
+            )
+        target.click()
+        logger.info(f"已点击弹窗条目「{item_text}」")
+
+    def open_add_device_category_page(self) -> None:
+        """从主页进入设备类别选择页（点击 ivAddDevice → 点击「添加设备」条目）。"""
+        self.open_add_device_menu()
+        self.click_add_device_popup_item(self.POPUP_ITEM_ADD_DEVICE)
