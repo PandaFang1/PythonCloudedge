@@ -216,16 +216,19 @@ ADBKeyboard 已安装（`com.android.adbkeyboard/.AdbIME`），可通过
 | `layout_next` | 下一步容器 | |
 | `tv_next` | 下一步按钮 | "下一步" |
 
-### 7.4 待 PAGE 6-11 dump 替换的占位符
+### 7.4 真机验证的后续页面 resource-id（2026-10-09 全流程 dump）
 
-| 步骤 | 占位符 | 备注 |
+| 步骤 | Activity | 关键 resource-id |
 |---|---|---|
-| 6 弹框 | `tv_dialog_title` / `tv_dialog_ssid` / `tv_dialog_password` / `btn_determine` | 需 Chime Base 配对后真机 dump |
-| 7 连接网络 | `pb_loading` | 同上 |
-| 8 成功页 | `btn_done` | 同上 |
-| 9 安装指引 | `tv_next`（共用）| 同上 |
-| 10 网络诊断 | `btn_back_home` | 同上 |
-| 11 主页设备列表 | `rv_device_list` / `tv_device_name` | 同上 |
+| 3 连接设备 | `BleSearchDeviceActivity`（整页，非 BottomSheet） | `tv_title`='连接设备'、`tv_device_name`=SN、`tv_next`='添加'（行右侧） |
+| 5 无线连接 | `AddDeviceGetWifiListActivity` | `wifi_name_et`、`tv_change_wifi`（**SSID 框右侧箭头，点击收起列表露出密码框**）、`pwd_et`、`tv_next`='下一步' |
+| 6 弹框 | 同上 Activity 内 | `title`='提示'、`message`（含 'WIFI名称：xxx\nWIFI密码：yyy'，解析比对）、`positiveButton`='确定'、`negativeButton`='取消' |
+| 7 连接网络 | `SmartWiFiActivity` | `tv_title`='连接网络'、`tv_time` 倒计时、`tvDeviceRegister`='注册到云端'（完成判定=成功页 `tv_find_device` 出现） |
+| 8 连接成功 | `SearchDeviceActivity` | `tv_title`='连接成功'、`tv_find_device`='添加设备成功'、`scan_camera_name`=SN、`pps_back_home`='下一步' |
+| 8.5 设置房间 | `AddDeviceSetRoomActivity` | `tv_device_name`=SN、`tv_category_name`=房间名、`pps_back_home`='完成' |
+| 9 安装指引 | `GuideRightPlacePicActivity` | `tv_title`='安装指引'、`tv_content`、`tv_next_vp`='下一步' |
+| 10 网络诊断 | `NetworkDiagnosticActivity` | `tv_title`='网络诊断'、`tv_back_home`='返回首页'、`next`='检查更新' |
+| 11 主页 | `MainActivity` | `tvDeviceName`（普通设备）、`tvJingleBaseName`=SN（Chime Base）、`tvJingleBaseOnline`='在线' |
 
 ## 8. 新增设备类型模板
 
@@ -309,12 +312,15 @@ python -m pytest tests/test_device_flow_factory.py -v
 - **忽略提示文案**（用户已确认）：不等待/不断言「WiFi 搜索中」等提示文案，
   无线连接页直接以 `rv_wifi_list` 渲染完成判定就绪
 - **WiFi 频段**（用户已确认）：**2.4G / 5G 均支持**，不按频段过滤或断言
-- **中文 SSID 输入**：需用 ADBKeyboard（已装），不能直接 `input text`
-- **PAGE 6-11 占位符**：弹框 / 连接 / 成功 / 安装 / 诊断 / 主页 6 个页面
-  的 resource-id 仍为占位符，需在 Chime Base 配对后真机 dump 替换
+- **中文 SSID 输入**：需用 ADBKeyboard（已装），不能直接 `input text`；
+  输入 SSID 后必须点 SSID 框右侧箭头（`tv_change_wifi`）收起 WiFi 列表，
+  密码框 `pwd_et` 才会渲染出来
 - **Chime Base 配对态**：必须物理上电 + 进入配对态（指示灯蓝灯闪烁），
-  否则「搜到的设备列表」为空，测试卡在 `click_add_button_by_sn`
-- **`xiaoMI-楼顶拷机IPC` 不在默认 WiFi 列表**：需手动输入或 ADBKeyboard
+  否则「搜到的设备列表」为空，测试卡在 `click_add_button_by_sn`。
+  **注意**：设备配网成功后即离开配对态，重跑用例前需按复位键重置设备
+  （或先从账号删除该设备）
+- **重复添加**：2026-10-09 真机全流程验证成功后，Chime Base（SN 131903239）
+  已绑定测试账号；再次试跑需先重置设备
 
 ## 12. 后续扩展
 

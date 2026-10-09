@@ -25,10 +25,15 @@ TEXT_DIAGNOSTIC_KEYWORDS = ("网络", "诊断", "检测", "信号")
 
 
 class ChimeInstallGuidePage(BasePage):
-    """「安装指引」页面（多张图片引导，最后一步「下一步」）。"""
+    """「安装指引」页面（GuideRightPlacePicActivity）。
 
-    TV_TITLE = {"name": "com.cloudedge.smarteye:id/tv_title"}
-    BTN_NEXT = {"name": "com.cloudedge.smarteye:id/btn_next", "text": TEXT_NEXT}
+    真机验证：tv_content 为安装位置说明文案，
+    底部「下一步」按钮为 tv_next_vp。
+    """
+
+    TV_TITLE = {"name": "com.cloudedge.smarteye:id/tv_title"}  # '安装指引'
+    TV_CONTENT = {"name": "com.cloudedge.smarteye:id/tv_content"}  # 安装说明文案
+    BTN_NEXT = {"name": "com.cloudedge.smarteye:id/tv_next_vp", "text": TEXT_NEXT}
 
     def wait_for_page_loaded(self, timeout: float = 30.0) -> bool:
         """等待「安装指引」页加载完成。"""
@@ -50,13 +55,24 @@ class ChimeInstallGuidePage(BasePage):
 
 
 class ChimeNetworkDiagnosticPage(BasePage):
-    """「网络诊断」页面（底部「返回首页」+ 断言首页设备列表）。"""
+    """「网络诊断」页面（NetworkDiagnosticActivity）。
 
-    TV_TITLE = {"name": "com.cloudedge.smarteye:id/tv_title"}
-    BTN_BACK_HOME = {"name": "com.cloudedge.smarteye:id/btn_back_home", "text": TEXT_BACK_HOME}
+    真机验证：tv_des_title='WIFI信号强度'、tv_desc_wifi_strength='强'、
+    tv_back_home='返回首页'（底部主按钮）、next='检查更新'。
+    """
 
-    # 诊断结果展示区（占位符）
-    TV_DIAGNOSTIC_RESULT = {"name": "com.cloudedge.smarteye:id/tv_diagnostic_result"}
+    TV_TITLE = {"name": "com.cloudedge.smarteye:id/tv_title"}  # '网络诊断'
+    TV_RIGHT_TEXT = {"name": "com.cloudedge.smarteye:id/tv_right_text"}  # '跳过'
+    TV_DES_TITLE = {"name": "com.cloudedge.smarteye:id/tv_des_title"}  # 'WIFI信号强度'
+    TV_DESC_WIFI_STRENGTH = {
+        "name": "com.cloudedge.smarteye:id/tv_desc_wifi_strength",
+    }  # '强' / '中' / '弱'
+    TV_DESC_CONTENT = {"name": "com.cloudedge.smarteye:id/tv_desc_content"}  # 诊断结论
+    BTN_BACK_HOME = {
+        "name": "com.cloudedge.smarteye:id/tv_back_home",
+        "text": TEXT_BACK_HOME,
+    }  # 底部「返回首页」
+    BTN_CHECK_UPDATE = {"name": "com.cloudedge.smarteye:id/next"}  # '检查更新'
 
     def wait_for_page_loaded(self, timeout: float = 30.0) -> bool:
         """等待「网络诊断」页加载完成。"""

@@ -50,25 +50,41 @@ class CloudEdgeMainPage(BasePage):
     def get_device_list(self) -> list:
         """获取首页设备列表中所有可见设备的 SN / 名称。
 
-        真机 poco dump 后需替换 `rv_device_list` 与 `tv_device_name` 的
-        resource-id；当前为占位符，匹配失败时返回空列表（不抛异常）。
-        设备未添加成功时通常列表为空。
+        真机验证（2026-10-09）：
+        - 普通设备：`tvDeviceName`（如 '132003599'）
+        - Chime Base：`tvJingleBaseName`（如 '131903239'），
+          在线状态为 `tvJingleBaseOnline`（'在线' / '离线'）
+        返回两者合集（仅设备名/SN）。
 
         :return: 设备 SN / 名称列表
         """
-        RV_DEVICE_LIST = {"name": "com.cloudedge.smarteye:id/rv_device_list"}
-        TV_DEVICE_NAME = {"name": "com.cloudedge.smarteye:id/tv_device_name"}
-        if not self.exists(RV_DEVICE_LIST):
-            logger.debug("首页设备列表容器未找到（可能无设备或资源 id 待替换）")
-            return []
+        TV_DEVICE_NAME = "com.cloudedge.smarteye:id/tvDeviceName"
+        TV_JINGLE_BASE_NAME = "com.cloudedge.smarteye:id/tvJingleBaseName"
         result: list = []
-        for item in self.poco(**RV_DEVICE_LIST).children():
-            name_node = item.offspring(TV_DEVICE_NAME["name"])
-            if name_node.exists():
-                text = name_node.attr("text")
+        for rid in (TV_DEVICE_NAME, TV_JINGLE_BASE_NAME):
+            for node in self.poco(rid):
+                text = node.attr("text")
                 if text:
                     result.append(text)
+        logger.debug(f"首页设备列表：{result}")
         return result
+
+    def is_device_online(self, sn: str) -> bool:
+        """判断指定 SN 的 Chime Base 在主页是否为「在线」状态。
+
+        :param sn: 设备 SN
+        :return: 在线返回 True；未找到或离线返回 False
+        """
+        TV_JINGLE_BASE_NAME = "com.cloudedge.smarteye:id/tvJingleBaseName"
+        TV_JINGLE_BASE_ONLINE = "com.cloudedge.smarteye:id/tvJingleBaseOnline"
+        for node in self.poco(TV_JINGLE_BASE_NAME):
+            if node.attr("text") == sn:
+                row = node.parent()
+                online_node = row.offspring(TV_JINGLE_BASE_ONLINE)
+                if online_node.exists():
+                    status = online_node.attr("text") or ""
+                    return "在线" in status
+        return False
 
     def wait_for_page_loaded(self, timeout: float = 20.0) -> bool:
         """等待主页面加载完成（以「添加设备」+「菜单」按钮同时出现为识别点）。

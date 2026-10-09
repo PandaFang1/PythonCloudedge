@@ -1,20 +1,24 @@
 """智能门铃 + Chime Base 端到端添加流程（完整实现）。
 
-业务路径（用户已确认）：
+业务路径（真机 2026-10-09 全流程验证通过）：
     智能门铃（category） → Chime Base（type） →
 
     步骤 1：等待「选择 Chime Base 页面」加载（提示安装位置），点击「下一步」
-    步骤 2：等待「接入电源」页面加载，点击「下一步」
-    步骤 3：等待「连接设备」页面加载，在搜到的设备中点击目标 SN
-            右侧的「添加」按钮
+            （PowerOnActivity）
+    步骤 2：等待「接入电源」页面加载，点击「下一步」（PowerOnActivity）
+    步骤 3：等待「连接设备」页面加载（BleSearchDeviceActivity 整页列表），
+            在搜到的设备中点击目标 SN 右侧的「添加」按钮
     步骤 4：等待「无线连接」页面加载完成（忽略提示文案，以 WiFi 列表渲染为准；
-            WiFi 2.4G / 5G 均支持）
-    步骤 5：输入 WiFi 名称和密码，点击「下一步」
-    步骤 6：弹框比对 WiFi 信息与输入一致，点击「确定」
-    步骤 7：等待「连接网络」页面转圈消失
-    步骤 8：在「连接成功」页面点击「下一步」→「完成」
-    步骤 9a：在「安装指引」页面点击「下一步」
-    步骤 9b：在「网络诊断」页面底部点击「返回首页」+ 断言首页含 SN
+            WiFi 2.4G / 5G 均支持）（AddDeviceGetWifiListActivity）
+    步骤 5：输入 WiFi 名称 → 点 SSID 框右侧箭头收起列表（密码框才出现）
+            → 输入密码 → 点击「下一步」
+    步骤 6：弹框（title='提示'）比对 WiFi 名称/密码与输入一致，点击「确定」
+    步骤 7：等待「连接网络」页（SmartWiFiActivity）设备入网完成
+    步骤 8：「连接成功」页（SearchDeviceActivity）点「下一步」→
+            「设置房间」页（AddDeviceSetRoomActivity）点「完成」
+    步骤 9a：「安装指引」页（GuideRightPlacePicActivity）点「下一步」
+    步骤 9b：「网络诊断」页（NetworkDiagnosticActivity）点「返回首页」
+            + 断言首页含 SN（tvJingleBaseName）
 
 默认测试数据（用户已提供，可在 run() 时覆盖）：
     SSID     = "xiaoMI-楼顶拷机IPC"
@@ -32,6 +36,7 @@ from typing import Any, Optional
 from pages.android.add_device_flow.base_add_device_flow import BaseAddDeviceFlow
 from pages.android.add_device_flow.pages.chime_connection_pages import (
     ChimeConnectingPage,
+    ChimeSetRoomPage,
     ChimeSuccessPage,
 )
 from pages.android.add_device_flow.pages.chime_device_pairing_pages import (
@@ -85,6 +90,7 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         self.wifi_config_page = ChimeWifiConfigPage(poco, udid)
         self.connecting_page = ChimeConnectingPage(poco, udid)
         self.success_page = ChimeSuccessPage(poco, udid)
+        self.set_room_page = ChimeSetRoomPage(poco, udid)
         self.install_guide_page = ChimeInstallGuidePage(poco, udid)
         self.network_diagnostic_page = ChimeNetworkDiagnosticPage(poco, udid)
 
@@ -125,7 +131,10 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
     def input_wifi_credentials(
         self, ssid: str, password: str, timeout: float = 30.0,
     ) -> None:
-        """步骤 5：输入 WiFi 名称和密码，点「下一步」。
+        """步骤 5：输入 WiFi 名称，收起列表，输入密码，点「下一步」。
+
+        真机验证：WiFi 列表会盖住密码框，输入 SSID 后必须先点
+        SSID 框右侧箭头（tv_change_wifi）收起列表，密码框才出现。
 
         :param ssid: WiFi SSID（默认 `DEFAULT_WIFI_SSID`）
         :param password: WiFi 密码（默认 `DEFAULT_WIFI_PASSWORD`）
@@ -134,6 +143,7 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         password = password or DEFAULT_WIFI_PASSWORD
         self.log_step("input_wifi_credentials", f"开始（SSID={ssid!r}）")
         self.wifi_config_page.input_ssid(ssid, timeout=timeout)
+        self.wifi_config_page.collapse_wifi_list(timeout=timeout)
         self.wifi_config_page.input_password(password, timeout=timeout)
         self.wifi_config_page.click_next()
         self.log_step("input_wifi_credentials", "完成")
@@ -167,11 +177,15 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         self.log_step("wait_network_connected", "完成")
 
     def click_next_and_finish(self, timeout: float = 30.0) -> None:
-        """步骤 8：在「连接成功」页点「下一步」→「完成」。"""
+        """步骤 8：成功页「下一步」→ 设置房间页「完成」。
+
+        真机验证：成功页点「下一步」后进入 AddDeviceSetRoomActivity
+        （设置房间页），点底部「完成」进入安装指引页。
+        """
         self.log_step("click_next_and_finish", "开始")
         self.success_page.wait_for_page_loaded(timeout=timeout)
         self.success_page.click_next()
-        self.success_page.click_finish(timeout=timeout)
+        self.set_room_page.click_finish(timeout=timeout)
         self.log_step("click_next_and_finish", "完成")
 
     def skip_install_guide(self, timeout: float = 30.0) -> None:
