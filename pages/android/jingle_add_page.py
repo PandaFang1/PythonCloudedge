@@ -33,6 +33,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, List, Optional
 
 from pages.android.add_device_category_page import CloudEdgeAddDeviceCategoryPage
@@ -144,6 +145,73 @@ class JingleAddPage(BasePage):
         # 4. 主页断言：设备列表含目标 SN
         devices = self.assert_device_added(sn)
         logger.info(f"[JingleAddPage] 一站式添加完成：主页设备列表 {devices}")
+        return devices
+
+    def add_jingle_device_quick(
+        self,
+        sn: Optional[str] = None,
+        ssid: Optional[str] = None,
+        password: Optional[str] = None,
+        timeout: float = 30.0,
+        timeout_loading: float = 30.0,
+        timeout_connecting: float = 120.0,
+    ) -> List[str]:
+        """快捷添加智能门铃 Chime Base：类别页蓝牙区域点 SN → 主页断言。
+
+        快捷链路（真机 2026-10-10 用户确认，区别于完整链路）：
+        1. 「选择设备类别」页顶部蓝牙区域直接**点击设备 SN 号**
+           （搜索结果超量时点「查看更多」展开抽屉，下滑寻找后点击）
+        2. app 跳过「安装位置/接入电源指引」+「连接设备」页，
+           **直达 WiFi 信息输入页**
+        3. 之后与完整流程一致：输 SSID/密码 → 弹框确定 → 等待入网 →
+           成功页「下一步」→ 设置房间「完成」→ 安装指引 →
+           网络诊断「返回首页」→ 主页断言设备列表含 SN
+
+        调用前提：当前已处于「选择设备类别」页
+        （主页 ivAddDevice → 弹窗「添加设备」）。
+
+        :param sn: 设备 SN（默认取 `DEFAULT_DEVICE_SN`）
+        :param ssid: WiFi SSID（默认取 `DEFAULT_WIFI_SSID`）
+        :param password: WiFi 密码（默认取 `DEFAULT_WIFI_PASSWORD`）
+        :param timeout: 单步通用超时（秒）
+        :param timeout_loading: 页面加载类超时（秒）
+        :param timeout_connecting: 设备入网等待超时（秒，首配较慢）
+        :return: 主页设备列表（含 SN 视为成功）
+        :raises ElementNotFoundError: 任一页面/设备未找到时抛出
+        """
+        sn = sn or DEFAULT_DEVICE_SN
+        ssid = ssid or DEFAULT_WIFI_SSID
+        password = password or DEFAULT_WIFI_PASSWORD
+        logger.info(
+            f"[JingleAddPage] 开始快捷添加（蓝牙直达）：SN={sn!r}，SSID={ssid!r}"
+        )
+
+        # 1. 前置：确认「选择设备类别」页已加载
+        if not self.wait_for_page_loaded(timeout=timeout):
+            raise ElementNotFoundError(
+                f"「选择设备类别」页在 {timeout}s 内未加载，"
+                f"请先从主页 ivAddDevice → 弹窗「添加设备」进入"
+            )
+
+        # 2. 蓝牙区域点击目标 SN（自动处理「查看更多」抽屉 + 下滑查找）
+        #    → app 直达 WiFi 信息输入页
+        self.category_page.select_bt_device_auto(sn)
+        time.sleep(1.5)  # 等待跳转至无线连接页
+
+        # 3. 执行快捷流程（步骤 4-9，跳过指引与选设备）
+        flow = DoorbellChimeBaseFlow(self.poco, self.udid)
+        flow.run_quick(
+            sn=sn,
+            ssid=ssid,
+            password=password,
+            timeout=timeout,
+            timeout_loading=timeout_loading,
+            timeout_connecting=timeout_connecting,
+        )
+
+        # 4. 主页断言：设备列表含目标 SN
+        devices = self.assert_device_added(sn)
+        logger.info(f"[JingleAddPage] 快捷添加完成：主页设备列表 {devices}")
         return devices
 
     # ==================== 断言辅助 ====================

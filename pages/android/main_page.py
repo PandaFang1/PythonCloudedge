@@ -95,40 +95,66 @@ class CloudEdgeMainPage(BasePage):
     def get_device_list(self) -> list:
         """获取首页设备列表中所有可见设备的 SN / 名称。
 
-        真机验证（2026-10-09）：
-        - 普通设备：`tvDeviceName`（如 '132003599'）
-        - Chime Base：`tvJingleBaseName`（设备 SN 数字串），
-          在线状态为 `tvJingleBaseOnline`（'在线' / '离线'）
-        返回两者合集（仅设备名/SN）。
+        真机验证（2026-10-10 dump，主页 recyclerViewDevice）：
+        - 摄像机设备：`tvCameraName`（如 '132003599'，在线状态 `tvStatusOnline`）
+        - Chime Base：`tvJingleNeutralName`（SN 数字串，状态 `tvJingleNeutralOnline`）
+        - 兼容旧 dump 的 `tvDeviceName` / `tvJingleBaseName`（不同布局状态）
+        返回所有候选 id 命中文本的合集（仅设备名/SN）。
 
         :return: 设备 SN / 名称列表
         """
-        TV_DEVICE_NAME = "com.cloudedge.smarteye:id/tvDeviceName"
-        TV_JINGLE_BASE_NAME = "com.cloudedge.smarteye:id/tvJingleBaseName"
+        rid_candidates = (
+            "com.cloudedge.smarteye:id/tvDeviceName",
+            "com.cloudedge.smarteye:id/tvCameraName",
+            "com.cloudedge.smarteye:id/tvJingleBaseName",
+            "com.cloudedge.smarteye:id/tvJingleNeutralName",
+        )
         result: list = []
-        for rid in (TV_DEVICE_NAME, TV_JINGLE_BASE_NAME):
-            for node in self.poco(rid):
-                text = node.attr("text")
-                if text:
-                    result.append(text)
+        for rid in rid_candidates:
+            try:
+                for node in self.poco(rid):
+                    text = node.attr("text")
+                    if text:
+                        result.append(text)
+            except Exception as exc:  # noqa: BLE001 该 id 不存在时跳过
+                logger.debug(f"候选定位器 {rid} 无节点：{exc}")
         logger.debug(f"首页设备列表：{result}")
         return result
 
     def is_device_online(self, sn: str) -> bool:
-        """判断指定 SN 的 Chime Base 在主页是否为「在线」状态。
+        """判断指定 SN 的设备在主页是否为「在线」状态。
+
+        真机验证（2026-10-10）：不同设备类型的在线状态节点不同：
+        - Chime Base：`tvJingleNeutralName` / `tvJingleNeutralOnline`
+        - 摄像机：`tvCameraName` / `tvStatusOnline`
+        向上回溯到条目容器后按候选状态 id 查找。
 
         :param sn: 设备 SN
         :return: 在线返回 True；未找到或离线返回 False
         """
-        TV_JINGLE_BASE_NAME = "com.cloudedge.smarteye:id/tvJingleBaseName"
-        TV_JINGLE_BASE_ONLINE = "com.cloudedge.smarteye:id/tvJingleBaseOnline"
-        for node in self.poco(TV_JINGLE_BASE_NAME):
-            if node.attr("text") == sn:
-                row = node.parent()
-                online_node = row.offspring(TV_JINGLE_BASE_ONLINE)
-                if online_node.exists():
-                    status = online_node.attr("text") or ""
-                    return "在线" in status
+        name_rids = (
+            "com.cloudedge.smarteye:id/tvJingleBaseName",
+            "com.cloudedge.smarteye:id/tvJingleNeutralName",
+            "com.cloudedge.smarteye:id/tvDeviceName",
+            "com.cloudedge.smarteye:id/tvCameraName",
+        )
+        status_rids = (
+            "com.cloudedge.smarteye:id/tvJingleBaseOnline",
+            "com.cloudedge.smarteye:id/tvJingleNeutralOnline",
+            "com.cloudedge.smarteye:id/tvStatusOnline",
+        )
+        for name_rid in name_rids:
+            try:
+                for node in self.poco(name_rid):
+                    if node.attr("text") == sn:
+                        row = node.parent()
+                        for status_rid in status_rids:
+                            status_node = row.offspring(status_rid)
+                            if status_node.exists():
+                                status = status_node.attr("text") or ""
+                                return "在线" in status
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"候选定位器 {name_rid} 无节点：{exc}")
         return False
 
     def wait_for_page_loaded(self, timeout: float = 20.0) -> bool:

@@ -382,6 +382,78 @@ class CloudEdgeAddDeviceCategoryPage(BasePage):
         target.click()
         logger.info(f"已选择蓝牙设备「{model}」")
 
+    def _swipe_up_bt_sheet(self) -> None:
+        """在「查看更多」底部抽屉的列表内向上滑动一屏（露出下方条目）。"""
+        recycler = self.poco(self.BT_SHEET_RECYCLER["name"])
+        if not recycler.exists():
+            self.swipe_up()
+            return
+        bounds = recycler.get_bounds()  # [x_min, y_min, x_max, y_max]（归一化）
+        cx = (bounds[0] + bounds[2]) / 2
+        y_top, y_bottom = bounds[1], bounds[3]
+        start_y = y_top + (y_bottom - y_top) * 0.8
+        end_y = y_top + (y_bottom - y_top) * 0.2
+        self.poco.swipe([cx, start_y], [cx, end_y], duration=0.4)
+
+    def select_bt_device_auto(
+        self, sn: str, timeout: float = 15.0, max_swipes: int = 10,
+    ) -> None:
+        """快捷添加：在蓝牙区域自动查找并点击指定 SN 的设备。
+
+        真机快捷流程（2026-10-10 用户确认）：
+        首页「添加设备」→ 进入本页后，顶部蓝牙区域直接显示搜到的设备；
+        **点击设备 SN 号即可跳过指引/选设备页直达 WiFi 输入页**。
+
+        查找顺序：
+        1. 蓝牙区域当前可见列表（`tv_model` 文本 == sn）→ 命中即点击
+        2. 未命中且存在「查看更多」按钮（搜索结果超过展示槽位时出现）
+           → 点击展开底部抽屉 → 在抽屉内逐屏上滑查找，直至命中或滑到底
+
+        :param sn: 设备 SN（蓝牙区域展示的文本，纯数字串）
+        :param timeout: 等待蓝牙区域出现的时间（秒）
+        :param max_swipes: 抽屉内最大上滑屏数（防死循环）
+        :raises ElementNotFoundError: 蓝牙区域未出现 / 设备未搜到时抛出
+        """
+        if not self.wait_for_element(self.LL_BT, timeout=timeout):
+            raise ElementNotFoundError(
+                f"蓝牙区域在 {timeout}s 内未出现（附近无处于配对态的设备？）"
+            )
+        time.sleep(1.0)  # 等搜索结果刷新稳定
+
+        # 1. 当前可见列表直接命中
+        target = self.poco(self.BT_ITEM_MODEL["name"], text=sn)
+        if target.exists():
+            target.click()
+            logger.info(f"快捷添加：已点击蓝牙设备「{sn}」（可见列表直接命中）")
+            return
+
+        # 2. 展开抽屉后查找（含逐屏上滑）
+        if self.has_more_bt_devices_button():
+            self.click_more_bt_devices()
+            time.sleep(1.0)
+            for _ in range(max_swipes + 1):
+                target = self.poco(self.BT_ITEM_MODEL["name"], text=sn)
+                if target.exists():
+                    target.click()
+                    logger.info(f"快捷添加：已点击蓝牙设备「{sn}」（抽屉内命中）")
+                    return
+                before = self.get_bluetooth_devices()
+                self._swipe_up_bt_sheet()
+                time.sleep(0.8)
+                after = self.get_bluetooth_devices()
+                if after == before:  # 已滑到底，无新条目
+                    break
+            raise ElementNotFoundError(
+                f"快捷添加：抽屉内滑动 {max_swipes} 屏仍未找到设备「{sn}」"
+                f"（最后可见：{after}）"
+            )
+
+        available = self.get_bluetooth_devices()
+        raise ElementNotFoundError(
+            f"快捷添加：蓝牙区域未搜到设备「{sn}」且无「查看更多」"
+            f"（可见：{available}；请确认设备已上电并处于配对态）"
+        )
+
     def click_manual_add(self) -> None:
         """点击蓝牙区域底部「手动添加」按钮（按 SN/序列号添加）。"""
         self.click(self.TV_ADD_MANUAL)

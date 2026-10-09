@@ -235,3 +235,53 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         # 断言已跳到 MainActivity 且设备列表含 SN
         self.network_diagnostic_page.assert_device_added(sn, timeout=timeout)
         self.log_step("back_to_homepage_and_assert", "完成")
+
+    # ==================== 快捷流程（蓝牙直达）====================
+
+    def run_quick(self, **kwargs: Any) -> None:
+        """快捷流程模板：跳过步骤 1-3，从步骤 4（无线连接页）开始执行。
+
+        快捷路径（真机 2026-10-10 用户确认）：
+        在「选择设备类别」页顶部蓝牙区域**直接点击设备 SN**（或
+        「查看更多」抽屉下滑查找），app 跳过「安装位置/接入电源指引」
+        和「连接设备」页，直达 WiFi 信息输入页（AddDeviceGetWifiListActivity），
+        之后的步骤 4-9 与完整流程 `run()` 完全一致。
+
+        调用前提：调用方已在类别页蓝牙区域点击目标 SN
+        （如 `add_device_category_page.select_bt_device_auto(sn)`）。
+
+        :param kwargs: 同 `run()`（sn/ssid/password/timeout 等）
+        """
+        logger.info(
+            f"[{self.FLOW_NAME}] 开始快捷端到端添加流程（蓝牙直达 WiFi 输入页）："
+            f"category={self.category!r}，type_name={self.type_name!r}，"
+            f"SN={kwargs.get('sn', '')!r}"
+        )
+        # 步骤 4-5：无线连接
+        self.wait_wifi_ready(timeout_loading=kwargs.get("timeout_loading", 30))
+        self.input_wifi_credentials(
+            kwargs.get("ssid", ""),
+            kwargs.get("password", ""),
+            timeout=kwargs.get("timeout", 30),
+        )
+        # 步骤 6：弹框确认
+        self.confirm_wifi_popup(
+            expected_ssid=kwargs.get("ssid", ""),
+            expected_password=kwargs.get("password", ""),
+            timeout=kwargs.get("timeout", 30),
+        )
+        # 步骤 7-8：连接与完成
+        self.wait_network_connected(
+            timeout_connecting=kwargs.get("timeout_connecting", 90),
+        )
+        self.click_next_and_finish(timeout=kwargs.get("timeout", 30))
+        # 步骤 9：安装指引 + 返回首页
+        self.skip_install_guide(timeout=kwargs.get("timeout", 30))
+        self.back_to_homepage_and_assert(
+            kwargs.get("sn", ""),
+            timeout=kwargs.get("timeout", 30),
+        )
+        logger.info(
+            f"[{self.FLOW_NAME}] 快捷端到端添加流程已完成："
+            f"category={self.category!r}，type_name={self.type_name!r}"
+        )

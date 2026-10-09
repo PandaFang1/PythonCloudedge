@@ -1,6 +1,7 @@
 # 智能门铃 Chime Base 一站式添加页面（jingle_add_page）
 
 > 真机全流程验证：2026-10-09（Redmi 22101317C / cfed8c100822，SN 131903239）
+> 快捷流程验证：2026-10-10（Redmi Note 11 5G / TC55LJMR59W8ZPRK，SN 131805981）
 
 ## 1. 概述
 
@@ -9,18 +10,34 @@
 **一站式门面 PO**：封装从「选择设备类别」页开始，到「添加完成
 （主页断言设备列表含 SN）」的完整流程。
 
-对用例暴露单一入口 `add_jingle_device()`，一行代码完成整个添加链路：
+对用例暴露两个入口：
 
 ```python
 jingle_page = PageFactory.create(
     "android", "jingle_add_page", poco=poco, udid=udid,
 )
+# 入口 1：完整流程（类别选择 → 指引×2 → 选设备 → WiFi → ... → 主页断言）
 devices = jingle_page.add_jingle_device()  # 全默认参数（环境变量注入）
 # 或直接以参数覆盖测试数据
 devices = jingle_page.add_jingle_device(
     sn="<SN>", ssid="<SSID>", password="<密码>",
 )
+# 入口 2：快捷流程（蓝牙区域直接点 SN → 直达 WiFi 输入页 → 后续同完整流程）
+devices = jingle_page.add_jingle_device_quick(
+    sn="<SN>", ssid="<SSID>", password="<密码>",
+)
 ```
+
+### 1.1 快捷流程 vs 完整流程
+
+| | 完整 `add_jingle_device()` | 快捷 `add_jingle_device_quick()` |
+|---|---|---|
+| 入口动作 | 选「智能门铃」→「Chime Base」 | 类别页蓝牙区域**直接点设备 SN** |
+| 跳过的页面 | — | 安装位置指引、接入电源指引、连接设备页 |
+| 进入方式 | `start_flow()` → `Flow.run()`（步骤 1-9） | `select_bt_device_auto(sn)` → `Flow.run_quick()`（步骤 4-9） |
+| 后续步骤 | WiFi 输入 → 弹框 → 入网 → 设置房间 → 安装指引 → 网络诊断 → 主页断言 | **完全一致** |
+| 蓝牙区域 SN 未直接可见 | — | 自动点「查看更多」展开抽屉，逐屏上滑查找（滑到底自动停） |
+| 前提 | 设备已上电（会在连接设备页被搜到） | 设备处于配对态（蓝牙区域 `ll_bt` 可见） |
 
 ## 2. 完整流程记录（11 个页面/阶段，真机逐步验证）
 
@@ -40,7 +57,7 @@ devices = jingle_page.add_jingle_device(
 | 8.5 | 设置房间 | `AddDeviceSetRoomActivity` | 点「完成」 | `tv_device_name`（SN）/ `tv_category_name`（房间名）/ `pps_back_home`（'完成'） |
 | 9 | 安装指引 | `GuideRightPlacePicActivity` | 点「下一步」 | `tv_title`（'安装指引'）/ `tv_content` / `tv_next_vp`（'下一步'） |
 | 10 | 网络诊断 | `NetworkDiagnosticActivity` | 底部点「返回首页」 | `tv_title`（'网络诊断'）/ `tv_back_home`（'返回首页'） |
-| 11 | 主页断言 | `MainActivity` | 断言设备列表含 SN（判定配网成功） | `tvJingleBaseName`（SN）/ `tvJingleBaseOnline`（'在线'） |
+| 11 | 主页断言 | `MainActivity` | 断言设备列表含 SN（判定配网成功） | `tvJingleNeutralName`（SN）/ `tvJingleNeutralOnline`（'在线'）；摄像机为 `tvCameraName` / `tvStatusOnline` |
 
 ## 3. 内部组合（Facade，不重复实现）
 

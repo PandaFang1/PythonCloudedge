@@ -197,6 +197,36 @@ PO 已封装完整生命周期：
 登录后先 `sleep 3s` 等主页稳定 → `handle_guide()` → 再 `sleep 2s` →
 点「添加设备」，真机验证稳定。
 
+### 6.3 快捷添加流程（蓝牙直达，2026-10-10 真机验证）
+
+除完整流程外，还有一条**快捷路径**：在「选择设备类别」页顶部
+蓝牙区域**直接点击设备 SN 号**，跳过「安装位置/接入电源指引」和
+「连接设备」页，直达 WiFi 信息输入页；后续步骤与完整流程一致。
+
+```
+完整流程：类别页 → PowerOn 指引×2 → 连接设备页(点添加) → WiFi 输入 → ...
+快捷流程：类别页 → 蓝牙区域点 SN（或「查看更多」抽屉下滑查找）
+              → WiFi 输入 → 弹框确定 → 等待入网 → 成功页
+              → 设置房间 → 安装指引 → 网络诊断 → 返回首页 → 主页断言
+```
+
+三个层次封装：
+
+| 层次 | 入口 | 说明 |
+|---|---|---|
+| PO | `CloudEdgeAddDeviceCategoryPage.select_bt_device_auto(sn)` | 蓝牙区域自动查找并点击 SN：可见列表直接命中；未命中且有「查看更多」→ 展开底部抽屉逐屏上滑查找（`_swipe_up_bt_sheet`，滑到底自动停） |
+| Flow | `DoorbellChimeBaseFlow.run_quick(**kwargs)` | 快捷模板方法：跳过步骤 1-3，从步骤 4（`wait_wifi_ready`）开始执行至主页断言，步骤 4-9 与 `run()` 完全一致 |
+| 门面 | `JingleAddPage.add_jingle_device_quick(sn, ssid, password, ...)` | 一站式：类别页 `select_bt_device_auto` → `run_quick` → 主页断言 |
+
+对应用例：`testcases/android/test_add_doorbell_chime_quick.py`
+（结构同完整流程用例，仅第 3 步换为快捷入口）。
+
+**注意事项**：
+- 蓝牙区域（`ll_bt`）仅在附近有处于配对态的设备时显示；设备配网
+  成功后即离开配对态，重跑前需按复位键重置（或先从账号删除设备）
+- 快捷流程跳过类型选择，无法保证设备类型匹配——蓝牙区域展示的
+  即为可直连的设备，直接点 SN 即可
+
 ## 7. 真机 resource-id 汇总（已替换到 POs）
 
 ### 7.1 PowerOnActivity（步骤 1-3 共用）
@@ -260,7 +290,7 @@ PO 已封装完整生命周期：
 | 8.5 设置房间 | `AddDeviceSetRoomActivity` | `tv_device_name`=SN、`tv_category_name`=房间名、`pps_back_home`='完成' |
 | 9 安装指引 | `GuideRightPlacePicActivity` | `tv_title`='安装指引'、`tv_content`、`tv_next_vp`='下一步' |
 | 10 网络诊断 | `NetworkDiagnosticActivity` | `tv_title`='网络诊断'、`tv_back_home`='返回首页'、`next`='检查更新' |
-| 11 主页 | `MainActivity` | `tvDeviceName`（普通设备）、`tvJingleBaseName`=SN（Chime Base）、`tvJingleBaseOnline`='在线' |
+| 11 主页 | `MainActivity` | `tvCameraName`（摄像机）、`tvJingleNeutralName`=SN（Chime Base，状态 `tvJingleNeutralOnline`）；PO 兼容旧 id `tvDeviceName`/`tvJingleBaseName` |
 
 ## 8. 新增设备类型模板
 
@@ -336,6 +366,9 @@ python -m pytest tests/test_device_flow_factory.py -v
 - **真机验证进度**（2026-10-09，Redmi Note 11 5G，SN=131805981）：
   登录 → 引导处理 → 类别页 → PowerOn 三步 → 选设备 → WiFi 输入 →
   确认弹框 → 配网成功 → 设置房间 → 网络诊断「返回首页」**全流程已打通**
+- **快捷流程用例**：`testcases/android/test_add_doorbell_chime_quick.py`
+  （2026-10-10 真机验证通过：蓝牙区域点 SN 直达 WiFi 输入页 → 配网
+  成功 → 主页断言设备列表含 SN，设备显示「在线」）
 - **本轮修复**：
   - `run()` 模板方法中 `wait_wifi_ready(timeout=)` → `timeout_loading=`、
     `wait_network_connected(timeout=)` → `timeout_connecting=`（参数名
