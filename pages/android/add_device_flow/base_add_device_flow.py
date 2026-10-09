@@ -130,7 +130,7 @@ class BaseAddDeviceFlow(ABC):
             timeout=kwargs.get("timeout", 30),
         )
         # 步骤 4-5：无线连接（按设备类型可能略不同，但主流都走 WiFi 配网）
-        self.wait_wifi_ready(timeout=kwargs.get("timeout_loading", 30))
+        self.wait_wifi_ready(timeout_loading=kwargs.get("timeout_loading", 30))
         self.input_wifi_credentials(
             kwargs.get("ssid", ""),
             kwargs.get("password", ""),
@@ -144,7 +144,7 @@ class BaseAddDeviceFlow(ABC):
         )
         # 步骤 7-8：连接与完成
         self.wait_network_connected(
-            timeout=kwargs.get("timeout_connecting", 90),
+            timeout_connecting=kwargs.get("timeout_connecting", 90),
         )
         self.click_next_and_finish(timeout=kwargs.get("timeout", 30))
         # 步骤 9：安装指引 + 返回首页

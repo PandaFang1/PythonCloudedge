@@ -12,7 +12,11 @@ from __future__ import annotations
 import time
 from typing import List, Optional, Tuple
 
-from pages.base_page import BasePage, ElementNotFoundError
+from pages.base_page import (
+    BasePage,
+    ElementNotFoundError,
+    OperationFailedError,
+)
 from utils.log_utils import get_logger
 
 logger = get_logger()
@@ -186,29 +190,159 @@ class ChimeWifiConfigPage(BasePage):
         logger.info(f"已输入 SSID：{ssid!r}")
 
     def collapse_wifi_list(self, timeout: float = 10.0) -> None:
-        """点击 SSID 输入框最右侧的箭头（tv_change_wifi）收起 WiFi 列表。
+        """兼容旧接口：等价于 `ensure_wifi_list_collapsed()`。"""
+        self.ensure_wifi_list_collapsed(timeout=timeout)
 
-        真机验证：WiFi 列表会把密码输入框（pwd_et）盖住，必须先点该箭头
-        收起列表，密码框才会渲染出来。
+    ADBKEYBOARD_IME_ID = "com.android.adbkeyboard/.AdbIME"
+
+    def switch_to_adb_keyboard(self) -> str:
+        """将系统输入法切换为 ADBKeyboard，返回原输入法 ID。
+
+        真机调试（2026-10-09）确认：点击 WiFi 名称/密码输入框会弹出
+        **系统键盘**，遮挡密码框与「下一步」按钮。提前把输入法切到
+        ADBKeyboard（其不渲染键盘视图），点击输入框时系统键盘就不会
+        弹出，从根本上规避遮挡问题。
+
+        :return: 原输入法 ID（用于结束后 `restore_ime()` 还原）
         """
-        if not self.wait_for_element(self.TV_CHANGE_WIFI, timeout=timeout):
-            raise ElementNotFoundError("SSID 输入框右侧箭头（tv_change_wifi）未出现")
-        self.click(self.TV_CHANGE_WIFI)
-        # 等密码框出现（收起列表的标志）
-        if not self.wait_for_element(self.PWD_ET, timeout=timeout):
-            raise ElementNotFoundError(
-                "点击箭头收起列表后，密码输入框（pwd_et）仍未出现"
+        original = self._run_device_command(
+            ["adb", "-s", self.udid, "shell",
+             "settings", "get", "secure", "default_input_method"],
+            timeout=5,
+        ).strip()
+        self._run_device_command(
+            ["adb", "-s", self.udid, "shell", "ime", "set",
+             self.ADBKEYBOARD_IME_ID],
+            timeout=5,
+        )
+        logger.info(f"已切换输入法为 ADBKeyboard（原输入法：{original}）")
+        return original
+
+    def restore_ime(self, ime_id: str) -> None:
+        """还原系统输入法为指定 ID。"""
+        if ime_id and ime_id != self.ADBKEYBOARD_IME_ID:
+            self._run_device_command(
+                ["adb", "-s", self.udid, "shell", "ime", "set", ime_id],
+                timeout=5,
             )
-        logger.info("已点击箭头收起 WiFi 列表，密码输入框已露出")
+            logger.info(f"已还原输入法：{ime_id}")
+
+    def is_wifi_list_visible(self, timeout: float = 3.0) -> bool:
+        """检测 WiFi 列表（rv_wifi_list）当前是否显示。"""
+        return self.exists(self.RV_WIFI_LIST)
+
+    def ensure_wifi_list_collapsed(self, timeout: float = 10.0) -> None:
+        """确保 WiFi 列表已收起：若显示则点 SSID 框右侧箭头收起。
+
+        真机验证：WiFi 列表会把密码输入框（pwd_et）盖住，点箭头
+        （tv_change_wifi）收起列表后密码框才可见。
+        """
+        if self.is_wifi_list_visible():
+            if not self.wait_for_element(self.TV_CHANGE_WIFI, timeout=timeout):
+                raise ElementNotFoundError(
+                    "WiFi 列表显示中，但 SSID 输入框右侧箭头（tv_change_wifi）未出现"
+                )
+            self.click(self.TV_CHANGE_WIFI)
+            time.sleep(0.8)
+            logger.info("WiFi 列表显示中，已点击箭头收起")
+        else:
+            logger.debug("WiFi 列表未显示，无需收起")
+        # 等密码框可见（列表收起后应露出）
+        if not self.wait_for_element(self.PWD_ET, timeout=timeout):
+            logger.warning("WiFi 列表收起后密码框仍不可见，继续执行")
+
+    def _get_pwd_text_via_adb(self) -> str:
+        """从 poco 完整层级 dump 中读取密码框文本（绕过可见性过滤）。
+
+        注：不使用 `uiautomator dump`——它会与 pocoservice 抢占
+        accessibility 服务被 kill（exit 137，2026-10-09 真机验证）。
+        """
+        try:
+            hierarchy = self.poco.agent.hierarchy.dump()
+            payload = hierarchy.get("payload", hierarchy) or {}
+
+            def _find(node) -> str:
+                if not isinstance(node, dict):
+                    return ""
+                if node.get("name") == "com.cloudedge.smarteye:id/pwd_et":
+                    return node.get("text") or ""
+                for child in node.get("children", []) or []:
+                    result = _find(child)
+                    if result:
+                        return result
+                return ""
+
+            return _find(payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"poco dump 读取密码框文本失败：{exc}")
+        return ""
 
     def input_password(self, password: str, timeout: float = 10.0) -> None:
-        """在密码输入框填入 WiFi 密码。"""
-        self.input_text(self.PWD_ET, password, timeout=timeout)
-        logger.info("已输入 WiFi 密码（长度={}）".format(len(password)))
+        """在密码输入框填入 WiFi 密码（带校验重试）。
 
-    def click_next(self) -> None:
-        """点击「下一步」（触发弹框或跳转）。"""
-        self.click(self.TV_NEXT)
+        前置条件：调用前已 `switch_to_adb_keyboard()`（ADBKeyboard 激活，
+        点击输入框不会弹系统键盘）且 `ensure_wifi_list_collapsed()`
+        （WiFi 列表已收起，密码框可见）。
+
+        输入后校验文本非占位/非空，失败则清空重试。
+        """
+        placeholder = "输入密码"
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            et = self.poco(**self.PWD_ET)
+            if et.exists():
+                et.click()
+                time.sleep(0.5)
+                et.set_text("")
+                time.sleep(0.3)
+                et.set_text(password)
+            else:
+                # 兜底：坐标聚焦 + ADBKeyboard 广播注入
+                # （真机 dump：pwd_et bounds=[182,1803][898,1852]）
+                self._run_device_command(
+                    ["adb", "-s", self.udid, "shell", "input", "tap",
+                     "540", "1827"],
+                    timeout=5,
+                )
+                time.sleep(0.5)
+                self._run_device_command(
+                    ["adb", "-s", self.udid, "shell", "am", "broadcast", "-a",
+                     "ADB_INPUT_TEXT", "--es", "msg", password],
+                    timeout=5,
+                )
+            time.sleep(1.0)
+            current = self.poco(**self.PWD_ET).attr("text") \
+                if self.poco(**self.PWD_ET).exists() \
+                else self._get_pwd_text_via_adb()
+            if current and current != placeholder:
+                logger.info(
+                    "已输入 WiFi 密码（长度={}，attempt={}）".format(
+                        len(password), attempt
+                    )
+                )
+                return
+            logger.warning(
+                f"密码输入第 {attempt} 次未生效（当前={current!r}），重试"
+            )
+        raise OperationFailedError(
+            f"WiFi 密码输入 {max_attempts} 次均未生效（密码框仍为占位/空）"
+        )
+
+    def click_next(self, timeout: float = 10.0) -> None:
+        """点击「下一步」（触发弹框或跳转）。
+
+        前置条件：ADBKeyboard 激活期间无系统键盘遮挡；若按钮仍不可见
+        （异常遮挡），回退用 bounds 中心坐标点击。
+        """
+        node = self.poco(**self.TV_NEXT)
+        if node.exists():
+            node.click()
+        else:
+            # 兜底坐标（真机 2026-10-09 dump：tv_next bounds=[88,2155][992,2260]）
+            self._run_device_command(
+                ["adb", "-s", self.udid, "shell", "input", "tap", "540", "2207"],
+                timeout=5,
+            )
         logger.info("无线连接页：已点击「下一步」")
 
     def assert_and_confirm_popup(

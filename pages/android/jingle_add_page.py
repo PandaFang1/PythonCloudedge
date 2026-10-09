@@ -27,9 +27,7 @@
     )
     devices = jingle_page.add_jingle_device()          # 全默认参数
     devices = jingle_page.add_jingle_device(
-        sn="131903239",
-        ssid="xiaoMI-楼顶拷机IPC",
-        password="56565099",
+        sn="...", ssid="...", password="...",
     )
 """
 
@@ -96,9 +94,9 @@ class JingleAddPage(BasePage):
         5. 连接成功 → 设置房间「完成」→ 安装指引「下一步」
         6. 网络诊断「返回首页」→ 主页断言设备列表含 SN
 
-        :param sn: 设备 SN（默认 131903239）
-        :param ssid: WiFi SSID（默认 xiaoMI-楼顶拷机IPC）
-        :param password: WiFi 密码（默认 56565099）
+        :param sn: 设备 SN（默认取环境变量 `CLOUDEDGE_DEVICE_SN`）
+        :param ssid: WiFi SSID（默认取环境变量 `CLOUDEDGE_WIFI_SSID`）
+        :param password: WiFi 密码（默认取环境变量 `CLOUDEDGE_WIFI_PASSWORD`）
         :param type_des: 小类别描述（可选，同名类型消歧）
         :param timeout: 单步通用超时（秒）
         :param timeout_loading: 页面加载类超时（秒）

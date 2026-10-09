@@ -41,6 +41,12 @@ REGION = "美国"
 
 def _open_category_page(login_page, main_page, add_device_page):
     """从登录后主页一路导航到「选择设备类别」页（带重试）。"""
+    # 登录后等待主页稳定（设备列表/引导浮层渲染），避免过早点击
+    time.sleep(3.0)
+    # 登录后可能出现新手引导浮层，需逐页点击「下一步」直至消失，
+    # 否则会遮挡主页元素导致「添加设备」弹窗点击失败
+    main_page.handle_guide()
+    time.sleep(2.0)
     main_page.open_add_device_category_page()
     jumped = False
     for _ in range(3):

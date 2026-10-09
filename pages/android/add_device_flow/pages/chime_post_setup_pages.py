@@ -97,10 +97,15 @@ class ChimeNetworkDiagnosticPage(BasePage):
         logger.info("网络诊断页：已点击「返回首页」")
 
     def assert_device_added(self, sn: str, timeout: float = 30.0) -> None:
-        """断言已跳到首页且设备列表含指定 SN。
+        """断言已跳到首页且设备列表含指定 SN（带轮询重试）。
+
+        真机调试（2026-10-09）：点「返回首页」后主页设备列表需要
+        渲染时间，立即查询 `tvDeviceName` 会抛
+        `PocoNoSuchNodeException`。因此先等主页加载，再在 timeout
+        内轮询设备列表直至包含 SN。
 
         :param sn: 设备 SN / 型号
-        :raises ElementNotFoundError: 首页设备列表未含该 SN
+        :raises ElementNotFoundError: 首页设备列表在超时内未含该 SN
         """
         # 复用已有 CloudEdgeMainPage 检查设备列表
         main_page = CloudEdgeMainPage(self.poco, self.udid)
@@ -108,9 +113,18 @@ class ChimeNetworkDiagnosticPage(BasePage):
             raise ElementNotFoundError(
                 f"「返回首页」后未能在 {timeout}s 内进入主页"
             )
-        devices = main_page.get_device_list() if hasattr(main_page, "get_device_list") else []
-        if sn not in devices:
-            raise ElementNotFoundError(
-                f"主页设备列表应含 SN={sn!r}，实际：{devices}"
-            )
-        logger.info(f"主页设备列表断言通过：含 SN={sn!r}")
+        deadline = time.time() + timeout
+        last_devices: list = []
+        while time.time() < deadline:
+            try:
+                last_devices = main_page.get_device_list()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"设备列表暂不可查（渲染中）：{exc}")
+                last_devices = []
+            if sn in last_devices:
+                logger.info(f"主页设备列表断言通过：含 SN={sn!r}")
+                return
+            time.sleep(2.0)
+        raise ElementNotFoundError(
+            f"主页设备列表应含 SN={sn!r}，实际：{last_devices}"
+        )

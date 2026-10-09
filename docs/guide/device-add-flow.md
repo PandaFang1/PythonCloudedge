@@ -150,20 +150,52 @@ def power_on_device(self, **kwargs):
 ```python
 add_device_page = PageFactory.create(platform, "add_device_category_page", ...)
 flow = add_device_page.start_flow("智能门铃", "Chime Base")
-flow.run(sn="131903239", ssid="xiaoMI-楼顶拷机IPC", password="56565099")
+flow.run(sn="<SN>", ssid="<SSID>", password="<密码>")
 ```
 
-## 6. 真机测试数据（用户已提供）
+## 6. 真机测试数据
 
-```python
-DEFAULT_WIFI_SSID = "xiaoMI-楼顶拷机IPC"     # 中文 SSID，需用 ADBKeyboard 输入
-DEFAULT_WIFI_PASSWORD = "56565099"
-DEFAULT_DEVICE_SN = "131903239"
+`DoorbellChimeBaseFlow` 内置默认测试数据（可在 `run()` / `add_jingle_device()`
+时以参数覆盖，或通过环境变量注入）：
+
+| 常量 | 默认值 |
+|---|---|
+| `DEFAULT_DEVICE_SN` | `131805981` |
+| `DEFAULT_WIFI_SSID` | `TP-LINK_BEB6` |
+| `DEFAULT_WIFI_PASSWORD` | `18268056861` |
+
+```bash
+export CLOUDEDGE_DEVICE_SN="<设备SN>"
+export CLOUDEDGE_WIFI_SSID="<WiFi名称>"
+export CLOUDEDGE_WIFI_PASSWORD="<WiFi密码>"
 ```
 
-ADBKeyboard 已安装（`com.android.adbkeyboard/.AdbIME`），可通过
-`adb shell am broadcast -a ADB_INPUT_TEXT --es msg "xiaoMI-楼顶拷机IPC"`
-输入中文 SSID。
+### 6.1 ADBKeyboard 输入法管理（chime_device_pairing_pages.py）
+
+WiFi 名称/密码输入需要 ADBKeyboard（`com.android.adbkeyboard/.AdbIME`），
+PO 已封装完整生命周期：
+
+- `switch_to_adb_keyboard()`：切到 ADBKeyboard（返回原输入法 ID）。
+  ADBKeyboard 不渲染键盘视图，点击输入框时系统键盘不会遮挡 `pwd_et`
+- `input_ssid()` / `input_password()`：通过
+  `adb shell am broadcast -a ADB_INPUT_TEXT --es msg "<文本>"` 输入
+- `restore_ime(ime_id)`：输入完成后还原原输入法（如讯飞）
+- 输入密码后通过 `uiautomator dump` 回读校验（长度比对，失败自动重试）
+
+### 6.2 登录后新手引导处理（main_page.py）
+
+登录成功后 app 可能弹**新手引导浮层**（多页，遮挡主页元素导致
+「添加设备」点击失败）。`CloudEdgeMainPage.handle_guide()` 处理：
+
+- 逐页点击「下一步」（`GUIDE_BTN_NEXT`），最多 10 页防死循环
+- 末页按钮候选 `GUIDE_BTN_DONE_CANDIDATES`（按优先级）：
+  「知道了」/「完成」/「立即体验」/「开始使用」/「进入」
+  （真机 2026-10-09 验证：末页按钮为「知道了」）
+- 处理完毕后确认无引导按钮残留才返回
+
+`testcases/android/test_add_device.py` 的 `_open_category_page()` 中，
+登录后先 `sleep 3s` 等主页稳定 → `handle_guide()` → 再 `sleep 2s` →
+点「添加设备」，真机验证稳定。
 
 ## 7. 真机 resource-id 汇总（已替换到 POs）
 
@@ -301,11 +333,18 @@ python -m pytest tests/test_device_flow_factory.py -v
 - **默认 skip**：因需真实 Chime Base 设备 + 真实 WiFi，`HARDWARE_READY=False`
 - **真机调试**：将 `HARDWARE_READY` 改为 `True` 启用
 - **数据驱动**：`sn` / `ssid` / `wifi_password` 三个参数可被 pytest fixture 覆盖
-- **当前阻塞**：
-  - Chime Base 配对态（搜不到时跑不通）
-  - 4-6 个 PAGE 待 dump（弹框 / 连接 / 成功 / 安装 / 诊断 / 主页）
-  - 当前 `add_device_by_category("智能门铃", "Chime Base")` 跳转的 Activity
-    实际是 PowerOnActivity 而非预期 ResetDeviceActivity
+- **真机验证进度**（2026-10-09，Redmi Note 11 5G，SN=131805981）：
+  登录 → 引导处理 → 类别页 → PowerOn 三步 → 选设备 → WiFi 输入 →
+  确认弹框 → 配网成功 → 设置房间 → 网络诊断「返回首页」**全流程已打通**
+- **本轮修复**：
+  - `run()` 模板方法中 `wait_wifi_ready(timeout=)` → `timeout_loading=`、
+    `wait_network_connected(timeout=)` → `timeout_connecting=`（参数名
+    与子类方法签名不匹配导致 TypeError）
+  - `assert_device_added()` 加轮询重试：点「返回首页」后主页设备列表
+    需渲染时间，立即查询 `tvDeviceName` 会抛 `PocoNoSuchNodeException`；
+    现在在 timeout 内每 2s 轮询直至设备列表含 SN
+  - 安装指引页（步骤 9）不强制出现，未加载时记 WARNING 并跳过，
+    按网络诊断页/主页继续
 
 ## 11. 已知限制与约定
 
@@ -319,8 +358,8 @@ python -m pytest tests/test_device_flow_factory.py -v
   否则「搜到的设备列表」为空，测试卡在 `click_add_button_by_sn`。
   **注意**：设备配网成功后即离开配对态，重跑用例前需按复位键重置设备
   （或先从账号删除该设备）
-- **重复添加**：2026-10-09 真机全流程验证成功后，Chime Base（SN 131903239）
-  已绑定测试账号；再次试跑需先重置设备
+- **重复添加**：2026-10-09 真机全流程验证（SN 131903239、131805981）
+  成功后，Chime Base 已绑定测试账号；再次试跑需先重置设备
 
 ## 12. 后续扩展
 

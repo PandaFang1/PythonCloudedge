@@ -15,12 +15,10 @@
 jingle_page = PageFactory.create(
     "android", "jingle_add_page", poco=poco, udid=udid,
 )
-devices = jingle_page.add_jingle_device()  # 全默认参数
-# 或覆盖测试数据
+devices = jingle_page.add_jingle_device()  # 全默认参数（环境变量注入）
+# 或直接以参数覆盖测试数据
 devices = jingle_page.add_jingle_device(
-    sn="131903239",
-    ssid="xiaoMI-楼顶拷机IPC",
-    password="56565099",
+    sn="<SN>", ssid="<SSID>", password="<密码>",
 )
 ```
 
@@ -69,13 +67,13 @@ devices = jingle_page.add_jingle_device(
 | `add_jingle_device(sn, ssid, password, type_des, timeout, timeout_loading, timeout_connecting)` | **一站式添加**：类别页 → 9 步配网 → 主页断言，返回设备列表 |
 | `assert_device_added(sn, timeout)` | 单独断言主页设备列表含 SN（含在线状态附加检查） |
 
-默认测试数据（`doorbell_chime_base_flow.py` 常量，可在调用时覆盖）：
+默认测试数据（`doorbell_chime_base_flow.py`，从环境变量读取，不硬编码）：
 
-| 常量 | 默认值 |
+| 常量 | 来源 |
 |---|---|
-| `DEFAULT_DEVICE_SN` | `131903239` |
-| `DEFAULT_WIFI_SSID` | `xiaoMI-楼顶拷机IPC` |
-| `DEFAULT_WIFI_PASSWORD` | `56565099` |
+| `DEFAULT_DEVICE_SN` | 环境变量 `CLOUDEDGE_DEVICE_SN` |
+| `DEFAULT_WIFI_SSID` | 环境变量 `CLOUDEDGE_WIFI_SSID` |
+| `DEFAULT_WIFI_PASSWORD` | 环境变量 `CLOUDEDGE_WIFI_PASSWORD` |
 
 ## 5. 用例
 

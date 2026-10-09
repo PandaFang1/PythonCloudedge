@@ -20,10 +20,11 @@
     步骤 9b：「网络诊断」页（NetworkDiagnosticActivity）点「返回首页」
             + 断言首页含 SN（tvJingleBaseName）
 
-默认测试数据（用户已提供，可在 run() 时覆盖）：
-    SSID     = "xiaoMI-楼顶拷机IPC"
-    PASSWORD = "56565099"
-    SN       = "131903239"
+默认测试数据（不硬编码在代码/文档中，运行时通过环境变量注入）：
+    SSID     <- 环境变量 CLOUDEDGE_WIFI_SSID
+    PASSWORD <- 环境变量 CLOUDEDGE_WIFI_PASSWORD
+    SN       <- 环境变量 CLOUDEDGE_DEVICE_SN
+也可在调用 run() / add_jingle_device() 时通过参数直接覆盖。
 
 所有 9 步调用下游 PO（`pages.android.add_device_flow.pages.*`），
 PO 内具体定位器真机确认后需替换；本 Flow 仅串联调用并提供统一日志。
@@ -31,6 +32,7 @@ PO 内具体定位器真机确认后需替换；本 Flow 仅串联调用并提�
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 from pages.android.add_device_flow.base_add_device_flow import BaseAddDeviceFlow
@@ -56,10 +58,10 @@ from utils.log_utils import get_logger
 logger = get_logger()
 
 
-# 默认测试数据（用户已提供）
-DEFAULT_WIFI_SSID = "xiaoMI-楼顶拷机IPC"
-DEFAULT_WIFI_PASSWORD = "56565099"
-DEFAULT_DEVICE_SN = "131903239"
+# 默认测试数据：从环境变量读取，不在代码/文档中硬编码真实值
+DEFAULT_WIFI_SSID = os.getenv("CLOUDEDGE_WIFI_SSID", "")
+DEFAULT_WIFI_PASSWORD = os.getenv("CLOUDEDGE_WIFI_PASSWORD", "")
+DEFAULT_DEVICE_SN = os.getenv("CLOUDEDGE_DEVICE_SN", "")
 
 
 class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
@@ -133,8 +135,13 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
     ) -> None:
         """步骤 5：输入 WiFi 名称，收起列表，输入密码，点「下一步」。
 
-        真机验证：WiFi 列表会盖住密码框，输入 SSID 后必须先点
-        SSID 框右侧箭头（tv_change_wifi）收起列表，密码框才出现。
+        真机调试（2026-10-09）方案：
+        1. **先切输入法为 ADBKeyboard**（点击输入框不会弹系统键盘，
+           从根本上避免键盘遮挡密码框/「下一步」按钮）
+        2. 输入 SSID 后检测 WiFi 列表是否显示，显示则点 SSID 框右侧
+           箭头（tv_change_wifi）收起，密码框才可见
+        3. 输入密码（带校验重试）→ 点「下一步」
+        4. finally 还原原输入法
 
         :param ssid: WiFi SSID（默认 `DEFAULT_WIFI_SSID`）
         :param password: WiFi 密码（默认 `DEFAULT_WIFI_PASSWORD`）
@@ -142,10 +149,14 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         ssid = ssid or DEFAULT_WIFI_SSID
         password = password or DEFAULT_WIFI_PASSWORD
         self.log_step("input_wifi_credentials", f"开始（SSID={ssid!r}）")
-        self.wifi_config_page.input_ssid(ssid, timeout=timeout)
-        self.wifi_config_page.collapse_wifi_list(timeout=timeout)
-        self.wifi_config_page.input_password(password, timeout=timeout)
-        self.wifi_config_page.click_next()
+        original_ime = self.wifi_config_page.switch_to_adb_keyboard()
+        try:
+            self.wifi_config_page.input_ssid(ssid, timeout=timeout)
+            self.wifi_config_page.ensure_wifi_list_collapsed(timeout=timeout)
+            self.wifi_config_page.input_password(password, timeout=timeout)
+            self.wifi_config_page.click_next()
+        finally:
+            self.wifi_config_page.restore_ime(original_ime)
         self.log_step("input_wifi_credentials", "完成")
 
     def confirm_wifi_popup(
@@ -189,21 +200,38 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         self.log_step("click_next_and_finish", "完成")
 
     def skip_install_guide(self, timeout: float = 30.0) -> None:
-        """步骤 9a：安装指引页点「下一步」。"""
+        """步骤 9a：安装指引页点「下一步」（容错：页面未出现则跳过）。
+
+        真机调试（2026-10-09）：设置房间页点「完成」后，安装指引页
+        （tv_next_vp）可能不出现（app 版本差异 / 直接进入网络诊断页
+        或主页），因此页面未加载时记录警告并直接继续，由后续步骤
+        `back_to_homepage_and_assert` 完成剩余导航与断言。
+        """
         self.log_step("skip_install_guide", "开始")
-        self.install_guide_page.wait_for_page_loaded(timeout=timeout)
-        self.install_guide_page.click_next()
-        self.log_step("skip_install_guide", "完成")
+        if self.install_guide_page.wait_for_page_loaded(timeout=timeout):
+            self.install_guide_page.click_next()
+            self.log_step("skip_install_guide", "完成")
+        else:
+            logger.warning(
+                "安装指引页未出现，跳过本步骤"
+                "（后续按网络诊断页/主页继续）"
+            )
+            self.log_step("skip_install_guide", "跳过（页面未出现）")
 
     def back_to_homepage_and_assert(self, sn: str, timeout: float = 30.0) -> None:
-        """步骤 9b：网络诊断页底部「返回首页」+ 断言首页含 SN。
+        """步骤 9b：网络诊断页底部「返回首页」+ 断言首页含 SN（容错）。
+
+        网络诊断页未出现时（app 直接回到主页的场景），跳过点击
+        「返回首页」，直接执行主页断言。
 
         :param sn: 期望出现在首页的设备 SN（默认 `DEFAULT_DEVICE_SN`）
         """
         sn = sn or DEFAULT_DEVICE_SN
         self.log_step("back_to_homepage_and_assert", f"开始（SN={sn!r}）")
-        self.network_diagnostic_page.wait_for_page_loaded(timeout=timeout)
-        self.network_diagnostic_page.click_back_to_homepage()
+        if self.network_diagnostic_page.wait_for_page_loaded(timeout=timeout):
+            self.network_diagnostic_page.click_back_to_homepage()
+        else:
+            logger.warning("网络诊断页未出现，直接执行主页断言")
         # 断言已跳到 MainActivity 且设备列表含 SN
         self.network_diagnostic_page.assert_device_added(sn, timeout=timeout)
         self.log_step("back_to_homepage_and_assert", "完成")

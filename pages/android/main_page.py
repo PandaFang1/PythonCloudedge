@@ -34,6 +34,16 @@ class CloudEdgeMainPage(BasePage):
     # 欢迎页/登录页可能的跳过按钮（app 首启场景）
     BTN_SKIP = {"text": "跳过"}
 
+    # 登录后新手引导浮层的按钮（文本匹配，引导可能多页，逐页点击直至消失）
+    GUIDE_BTN_NEXT = {"text": "下一步"}
+    GUIDE_BTN_DONE_CANDIDATES = (
+        {"text": "知道了"},
+        {"text": "完成"},
+        {"text": "立即体验"},
+        {"text": "开始使用"},
+        {"text": "进入"},
+    )
+
     def __init__(self, poco, udid: str = ""):
         """
         :param poco: AndroidUiautomationPoco 驱动实例
@@ -47,12 +57,47 @@ class CloudEdgeMainPage(BasePage):
         """处理首启弹窗（跳过欢迎页/隐私政策等），进入主界面。"""
         self.click_if_exists(self.BTN_SKIP)
 
+    def handle_guide(self, max_steps: int = 10, interval: float = 0.5) -> bool:
+        """处理登录后的新手引导浮层（如有）。
+
+        引导页可能有多页，每页点「下一步」推进；末页按钮可能为
+        「完成」/「立即体验」/「开始使用」等，逐个尝试点击，
+        直到无引导按钮残留或达到 max_steps 上限。
+
+        :param max_steps: 最大点击次数（防死循环）
+        :param interval: 每次点击后的等待时间（秒）
+        :return: 处理过至少一个引导按钮返回 True，无引导返回 False
+        """
+        clicked_any = False
+        for _ in range(max_steps):
+            clicked = False
+            if self.exists(self.GUIDE_BTN_NEXT):
+                self.click(self.GUIDE_BTN_NEXT)
+                clicked = True
+            else:
+                for btn in self.GUIDE_BTN_DONE_CANDIDATES:
+                    if self.exists(btn):
+                        self.click(btn)
+                        clicked = True
+                        break
+            if clicked:
+                clicked_any = True
+                time.sleep(interval)
+            else:
+                break
+        if clicked_any:
+            logger.info("已处理登录后新手引导（无引导按钮残留）")
+            time.sleep(0.5)
+        else:
+            logger.debug("未检测到新手引导浮层")
+        return clicked_any
+
     def get_device_list(self) -> list:
         """获取首页设备列表中所有可见设备的 SN / 名称。
 
         真机验证（2026-10-09）：
         - 普通设备：`tvDeviceName`（如 '132003599'）
-        - Chime Base：`tvJingleBaseName`（如 '131903239'），
+        - Chime Base：`tvJingleBaseName`（设备 SN 数字串），
           在线状态为 `tvJingleBaseOnline`（'在线' / '离线'）
         返回两者合集（仅设备名/SN）。
 

@@ -10,12 +10,14 @@
         8. 连接成功「下一步」→「完成」 → 9. 安装指引「下一步」 →
         10. 网络诊断「返回首页」+ 断言首页含 SN
 
-前置条件：同登录用例（pm clear、预授权 11 项权限、禁用 autofill）
+前置条件：**app 保持已有登录态**（登录与添加设备是两个独立模块，
+本用例不做 pm clear / 重新登录；若检测到登录页则自动兜底登录一次）
 
 硬件依赖：
     - **真实 Chime Base 设备**：已上电且处于配对态（蓝牙/WiFi 可见）
-    - **真实 WiFi 网络**：`xiaoMI-楼顶拷机IPC` / `56565099`（可在 run() 覆盖）
-    - **设备 SN 已知**：`131903239`（默认）
+    - **真实 WiFi 网络**：SSID / 密码不硬编码，运行时通过环境变量注入
+      （`CLOUDEDGE_WIFI_SSID` / `CLOUDEDGE_WIFI_PASSWORD`）或调用参数覆盖
+    - **设备 SN 已知**：通过环境变量 `CLOUDEDGE_DEVICE_SN` 注入（或调用参数覆盖）
 
 默认 skip：
     - 本用例需要物理硬件，默认 `pytest.mark.skipif` 跳过整套
@@ -62,7 +64,8 @@ HARDWARE_READY = True
     not HARDWARE_READY,
     reason=(
         "需要真实 Chime Base 设备已上电并处于配对态，"
-        "以及真实 WiFi（默认 xiaoMI-楼顶拷机IPC / 56565099）"
+        "以及真实 WiFi（通过环境变量 CLOUDEDGE_WIFI_SSID / "
+        "CLOUDEDGE_WIFI_PASSWORD 注入）"
         "将 HARDWARE_READY 设为 True 启用本用例"
     ),
 )
@@ -74,9 +77,9 @@ def test_add_doorbell_chime_base(
 ):
     """端到端添加智能门铃 Chime Base。
 
-    :param sn: 设备 SN（默认 `131903239`）
-    :param ssid: WiFi SSID（默认 `xiaoMI-楼顶拷机IPC`）
-    :param wifi_password: WiFi 密码（默认 `56565099`）
+    :param sn: 设备 SN（默认取环境变量 `CLOUDEDGE_DEVICE_SN`）
+    :param ssid: WiFi SSID（默认取环境变量 `CLOUDEDGE_WIFI_SSID`）
+    :param wifi_password: WiFi 密码（默认取环境变量 `CLOUDEDGE_WIFI_PASSWORD`）
     """
     if platform != "android":
         pytest.skip("仅适用于 Android（CloudEdge）")
@@ -100,42 +103,39 @@ def test_add_doorbell_chime_base(
 
     original_autofill = ""
     try:
-        with allure.step("前置：清除 app 数据 + 预授权 + 禁用 autofill"):
-            login_page._run_device_command(
-                ["adb", "-s", device_info.udid, "shell", "pm", "clear",
-                 device_info.app_package],
-                timeout=15,
-            )
-            time.sleep(2.0)
-            for permission in RUNTIME_PERMISSIONS:
-                login_page._run_device_command(
-                    ["adb", "-s", device_info.udid, "shell", "pm", "grant",
-                     device_info.app_package, permission],
-                    timeout=5,
-                )
-            original_autofill = login_page._run_device_command(
-                ["adb", "-s", device_info.udid, "shell",
-                 "settings", "get", "secure", "autofill_service"],
-                timeout=5,
-            ).strip()
+        with allure.step("启动 app（保持已有登录态，登录/添加是两个独立模块）"):
             login_page._run_device_command(
                 ["adb", "-s", device_info.udid, "shell",
                  "settings", "put", "secure", "autofill_service", "null"],
                 timeout=5,
             )
-
-        with allure.step("登录账号（选国家「美国」）"):
+            # force-stop 清掉上次运行残留的 Activity 栈（如 ResetDeviceActivity），
+            # 重启后回到 MainActivity（登录态不受影响）
+            login_page._run_device_command(
+                ["adb", "-s", device_info.udid, "shell", "am", "force-stop",
+                 device_info.app_package],
+                timeout=10,
+            )
+            time.sleep(1.5)
             login_page.start_app(device_info.app_package)
-            assert login_page.wait_for_page_loaded(timeout=30), \
-                "[android] 未进入登录页"
-            login_page.login_with_region(
-                region_text=REGION, account=ACCOUNT, password=PASSWORD,
-                remember_password=True,
-            )
-            assert _wait_for_main_activity(login_page, timeout=60), (
-                f"[android] 登录后未进入 MainActivity（当前="
-                f"{login_page.get_current_activity().strip()}）"
-            )
+            time.sleep(3.0)
+            current = login_page.get_current_activity().strip()
+            if "LoginActivity" in current:
+                # 兜底：app 数据被清过时自动登录一次
+                assert login_page.wait_for_page_loaded(timeout=30), \
+                    "[android] 未进入登录页"
+                login_page.login_with_region(
+                    region_text=REGION, account=ACCOUNT, password=PASSWORD,
+                    remember_password=True,
+                )
+                assert _wait_for_main_activity(login_page, timeout=60), (
+                    f"[android] 登录后未进入 MainActivity（当前="
+                    f"{login_page.get_current_activity().strip()}）"
+                )
+            else:
+                assert _wait_for_main_activity(login_page, timeout=30), (
+                    f"[android] 未处于登录态主页（当前={current}）"
+                )
 
         with allure.step("主页 → 添加设备 → 进入「选择设备类别」页"):
             _open_category_page(login_page, main_page, add_device_page)
@@ -155,15 +155,5 @@ def test_add_doorbell_chime_base(
                 f"[android] 主页设备列表应含 SN={sn!r}，实际：{devices}"
             )
     finally:
-        try:
-            if original_autofill and original_autofill != "null":
-                login_page._run_device_command(
-                    ["adb", "-s", device_info.udid, "shell",
-                     "settings", "put", "secure", "autofill_service",
-                     original_autofill],
-                    timeout=5,
-                )
-        except Exception as exc:  # noqa: BLE001
-            print(f"[警告] 还原 autofill 服务失败：{exc}")
         with allure.step("关闭 CloudEdge"):
             login_page.stop_app(device_info.app_package)
