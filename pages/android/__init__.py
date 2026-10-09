@@ -6,6 +6,7 @@
 
 from pages.android.account_page import CloudEdgeAccountPage
 from pages.android.add_device_category_page import CloudEdgeAddDeviceCategoryPage
+from pages.android.jingle_add_page import JingleAddPage
 from pages.android.login_page import CloudEdgeLoginPage
 from pages.android.main_page import CloudEdgeMainPage
 from pages.android.message_page import CloudEdgeMessagePage
@@ -14,6 +15,7 @@ from pages.android.my_page import CloudEdgeMyPage
 __all__ = [
     "CloudEdgeAccountPage",
     "CloudEdgeAddDeviceCategoryPage",
+    "JingleAddPage",
     "CloudEdgeLoginPage",
     "CloudEdgeMainPage",
     "CloudEdgeMessagePage",

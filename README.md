@@ -98,6 +98,15 @@ Android 端另覆盖 **选择设备类别页**（首页 `ivAddDevice` → 弹窗
 |---|---|---|
 | 选择设备类别页 | `tv_title`（选择设备类别）+ `recyclerview_main`（左侧分类） | 方式 A：左侧 `tv_category_name` + 右侧 `tv_device_name`；方式 B：顶部 `rv_devices` 蓝牙列表 + 「查看更多」弹出 `design_bottom_sheet` 抽屉 |
 
+Android 端另覆盖 **智能门铃 Chime Base 一站式添加页**（工厂页面名 `jingle_add_page`，
+封装从「选择设备类别」页到「添加完成（主页断言）」的完整 11 阶段流程，
+真机 2026-10-09 全链路验证，详见
+[一站式添加页文档](docs/guide/jingle-add-page.md)）：
+
+| 页面 | Android 识别点（CloudEdge） | 说明 |
+|---|---|---|
+| jingle_add 一站式添加页 | 起点复用「选择设备类别」页识别点 | 一站式入口 `add_jingle_device(sn, ssid, password)`：选「智能门铃→Chime Base」→ 安装位置/接入电源指引 → 连接设备点 SN「添加」→ 无线连接（输 SSID → 点箭头收列表 → 输密码）→ 弹框比对「确定」→ 等待入网 → 成功页「下一步」→ 设置房间「完成」→ 安装指引「下一步」→ 网络诊断「返回首页」→ 主页断言 `tvJingleBaseName` 含 SN |
+
 - **底部 Tab 导航**：首页 ⇄ 消息页、首页 ⇄ 我的页，双端业务方法同名
   （`open_home_page` / `open_message_page` / `open_my_page`）
 - **双端定位器差异**：Android 文本用 `{"text": "xxx"}`、控件 ID 用
@@ -123,6 +132,11 @@ Android 端另覆盖 **选择设备类别页**（首页 `ivAddDevice` → 弹窗
   退出登录确认弹窗、`logout` 一站式退出
 - [选择设备类别页文档](docs/guide/add-device-category-page.md) — 选择设备类别页
   （Android）：按类别 / 蓝牙两种添加方式 + 「查看更多」BottomSheet
+- [设备添加流程文档](docs/guide/device-add-flow.md) — 策略模式架构：
+  BaseAddDeviceFlow + 5 类设备 Flow + DeviceFlowFactory 工厂分发
+- [jingle_add 一站式添加文档](docs/guide/jingle-add-page.md) — 智能门铃
+  Chime Base 一站式添加页：完整 11 阶段流程记录 + resource-id 速查 +
+  真机踩坑细节（箭头收列表 / 弹框解析 / 主页断言）
 - [串口测试](docs/guide/serial.md) — 串口 fixture、用例编写、运行
 
 ### 开发与执行规则

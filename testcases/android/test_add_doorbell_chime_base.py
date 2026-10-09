@@ -37,9 +37,6 @@ from pages.android.add_device_flow import (
     DEFAULT_WIFI_PASSWORD,
     DEFAULT_WIFI_SSID,
 )
-from pages.android.add_device_flow.doorbell_chime_base_flow import (
-    DoorbellChimeBaseFlow,
-)
 from pages.page_factory import PageFactory
 from testcases.android.test_add_device import _open_category_page
 from testcases.android.test_login_region import RUNTIME_PERMISSIONS
@@ -52,7 +49,7 @@ REGION = "美国"
 # 真实设备是否就绪：通过环境变量 / 真机调试时手动改为 True
 # 也可通过 pytest -k 命令单独控制：
 #   pytest -k chime_base --override-ini "markers="  (取消 skip)
-HARDWARE_READY = False
+HARDWARE_READY = True
 
 
 @pytest.mark.android
@@ -96,6 +93,10 @@ def test_add_doorbell_chime_base(
     add_device_page = PageFactory.create(
         platform, "add_device_category_page", poco=poco_driver, udid=device_info.udid
     )
+    # 一站式添加页面（jingle_add）：从设备类别页到添加完成的完整流程封装
+    jingle_add_page = PageFactory.create(
+        platform, "jingle_add_page", poco=poco_driver, udid=device_info.udid
+    )
 
     original_autofill = ""
     try:
@@ -136,23 +137,13 @@ def test_add_doorbell_chime_base(
                 f"{login_page.get_current_activity().strip()}）"
             )
 
-        with allure.step("主页 → 添加设备 → 「智能门铃 → Chime Base」→ 获取 Flow"):
+        with allure.step("主页 → 添加设备 → 进入「选择设备类别」页"):
             _open_category_page(login_page, main_page, add_device_page)
-            flow = add_device_page.start_flow(
-                category_name="智能门铃",
-                type_name="Chime Base",
-            )
-            assert isinstance(flow, DoorbellChimeBaseFlow), (
-                f"[android] 工厂分发结果类型错误：{type(flow).__name__}"
-            )
-            allure.attach(
-                str(flow.describe()),
-                name="Flow 实例信息",
-                attachment_type=allure.attachment_type.TEXT,
-            )
 
-        with allure.step("端到端配网（9 步）"):
-            flow.run(
+        with allure.step("一站式添加（jingle_add_page）：设备类别页 → 添加完成"):
+            # JingleAddPage 内部串联：选「智能门铃→Chime Base」→ 9 步配网
+            # → 主页断言设备列表含 SN（真机 2026-10-09 全流程验证）
+            devices = jingle_add_page.add_jingle_device(
                 sn=sn,
                 ssid=ssid,
                 password=wifi_password,
@@ -160,9 +151,6 @@ def test_add_doorbell_chime_base(
                 timeout_loading=30.0,
                 timeout_connecting=90.0,
             )
-
-        with allure.step("断言：主页设备列表含 SN"):
-            devices = main_page.get_device_list()
             assert sn in devices, (
                 f"[android] 主页设备列表应含 SN={sn!r}，实际：{devices}"
             )

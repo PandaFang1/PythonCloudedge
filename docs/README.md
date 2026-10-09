@@ -18,6 +18,8 @@ docs/
 │   ├── login-page.md         # 登录页与国家/区域选择页（ADBKeyboard 中文搜索）
 │   ├── account-page.md       # 我的信息页（退出登录 + 确认弹窗）
 │   ├── add-device-category-page.md # 选择设备类别页（按类别/蓝牙两种方式 + 查看更多）
+│   ├── device-add-flow.md    # 设备添加流程（策略模式 + 工厂分发 + 5 类设备）
+│   ├── jingle-add-page.md    # jingle_add 一站式添加页（Chime Base 完整 11 阶段流程）
 │   └── serial.md             # 串口测试
 ├── rules/
 │   ├── coding.md             # 代码规范
@@ -39,6 +41,8 @@ docs/
 7. [登录页文档](./guide/login-page.md)（登录页与国家/区域选择页，ADBKeyboard 中文搜索方案）
 8. [我的信息页文档](./guide/account-page.md)（退出登录与确认弹窗）
 9. [选择设备类别页文档](./guide/add-device-category-page.md)（按类别 / 蓝牙两种添加方式 + 查看更多抽屉）
+9.1 [设备添加流程文档](./guide/device-add-flow.md)（策略模式架构 + 5 类设备 Flow + 工厂分发）
+9.2 [jingle_add 一站式添加文档](./guide/jingle-add-page.md)（智能门铃 Chime Base 完整添加流程 + resource-id 速查）
 10. [代码规范](./rules/coding.md) — 写代码前必读
 11. [用例编写规则](./rules/testcase.md) — 写用例前必读
 12. [执行规则](./rules/execution.md) — 运行前必读

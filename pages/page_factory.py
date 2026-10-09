@@ -20,6 +20,7 @@ from pages.android import (
     CloudEdgeMainPage,
     CloudEdgeMessagePage,
     CloudEdgeMyPage,
+    JingleAddPage,
 )
 from pages.base_page import BasePage
 from pages.ios import YunjiMainPage, YunjiMessagePage, YunjiMyPage
@@ -32,6 +33,7 @@ REGISTRY: Dict[Tuple[str, str], Type[BasePage]] = {
     ("android", "login_page"): CloudEdgeLoginPage,
     ("android", "account_page"): CloudEdgeAccountPage,
     ("android", "add_device_category_page"): CloudEdgeAddDeviceCategoryPage,
+    ("android", "jingle_add_page"): JingleAddPage,
     ("android", "main_page"): CloudEdgeMainPage,
     ("ios", "main_page"): YunjiMainPage,
     ("android", "my_page"): CloudEdgeMyPage,
