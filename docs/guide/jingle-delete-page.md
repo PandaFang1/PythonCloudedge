@@ -28,7 +28,7 @@ remain = jingle_delete_page.delete_jingle_device(sn="131805981")
 
 | # | 阶段 | Activity | 操作 | 关键 resource-id |
 |---|---|---|---|---|
-| 1 | jingle 首页 | `JingleBaseActivity` | 主页**点击设备 SN**（Chime Base 条目名）进入；页面识别点=工具栏标题为 SN | `tvJingleNeutralName`（主页条目）/ `tv_title`（jingle 首页标题=SN） |
+| 1 | jingle 首页 | `JingleBaseActivity` | 主页**点击设备 SN**（Chime Base 条目名）进入；页面识别点=3 元素同时存在（`tv_title` 文本=SN **+** `iv_state_on` 设备状态图标 **+** `switch_btn_schedules` 日程开关） | `tvJingleNeutralName`（主页条目）/ `tv_title`（jingle 首页标题=SN）/ `iv_state_on`（设备状态图标）/ `switch_btn_schedules`（日程开关） |
 | 2 | 设置页 | `CameraSettingNewActivity` | 点击**右上角设置按钮**；页面识别点=标题「设置」 | `iv_submit`（右上角设置）/ `tv_title`（'设置'） |
 | 3 | 设置页下滑 | 同上 | **向下滑动**直至「删除设备」按钮可见，点击（按钮位于 `sv_setting` 列表最底部，进入时通常在屏外） | `btn_delete`（'删除设备'）/ `sv_setting` |
 | 4 | 删除确认弹框 | 同上（Dialog） | 比对弹框描述 → 点击「**删除**」（注意：确认按钮文本是「删除」不是「确定」） | `tv_ai_search_title`（'温馨提示'）/ `tv_ai_search_des`（'确定要删除该设备和子设备及所关联的数据？'）/ `tv_confirm`（'删除'）/ `tv_cancel`（'取消'） |
@@ -40,7 +40,9 @@ remain = jingle_delete_page.delete_jingle_device(sn="131805981")
 
 | 阶段 | 定位器 | 说明 |
 |---|---|---|
-| jingle 首页-标题 | `tv_title` | 文本=设备 SN，作为页面识别点 |
+| jingle 首页-标题 | `tv_title` | 文本=设备 SN，作为页面识别点 ① |
+| jingle 首页-状态图标 | `iv_state_on` | 设备状态（在线/离线指示），作为页面识别点 ②（2026-10-10 增） |
+| jingle 首页-日程开关 | `switch_btn_schedules` | 「日程」开关按钮，作为页面识别点 ③（2026-10-10 增） |
 | jingle 首页-设置 | `iv_submit` | 工具栏右上角 |
 | 设置页-标题 | `tv_title` | 文本='设置'，作为页面识别点 |
 | 设置页-删除 | `btn_delete` | 文本='删除设备'，列表底部 |
@@ -51,6 +53,10 @@ remain = jingle_delete_page.delete_jingle_device(sn="131805981")
 
 ### 3.2 关键容错
 
+- **jingle 首页 3 元素识别**（`open_jingle_home_by_sn`，2026-10-10 起）：
+  工具栏标题 `tv_title` 文本=SN 与 2 个新识别点（`iv_state_on` 设备状态图标、
+  `switch_btn_schedules` 日程开关）**同时存在**才判定进入 jingle 首页。
+  多识别点降低点击落空或标题文本撞名导致的误判概率。
 - **下滑查找**（`click_delete_button`）：「删除设备」在 `sv_setting`
   最底部，进入设置页时通常在屏幕外（poco 层级中存在但 `visible=False`）；
   实现为「逐屏上滑 → 检查可见 → 可见即点击」，上限 8 屏防死循环

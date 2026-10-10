@@ -68,10 +68,12 @@ class ChimeSelectDevicePage(BasePage):
                 result.append(text)
         return result
 
-    def click_add_button_by_sn(self, sn: str, timeout: float = 30.0) -> None:
+    def click_add_button_by_sn(self, sn: str, timeout: float = 150.0) -> None:
         """在设备列表中点击指定 SN 行右侧的「添加」按钮。
 
         :param sn: 设备 SN
+        :param timeout: 等待超时（2026-10-10 由 30s 改为 150s，对齐
+            APP 端蓝牙搜索 130s 倒计时 + 20s buffer）
         :raises ElementNotFoundError: 未找到该 SN 或该行无「添加」按钮
         """
         if not self.wait_for_page_loaded(timeout=timeout):
@@ -98,7 +100,7 @@ class ChimeSelectDevicePage(BasePage):
         add_btn.click()
         logger.info(f"已点击设备「{sn}」行右侧的「添加」按钮")
 
-    def wait_scanning_finished(self, timeout: float = 60.0) -> bool:
+    def wait_scanning_finished(self, timeout: float = 150.0) -> bool:
         """等待扫描出至少一台设备（tv_device_name 出现即视为完成）。"""
         return self.wait_for_element(self.TV_DEVICE_NAME, timeout=timeout)
 
@@ -137,17 +139,15 @@ class ChimeWifiConfigPage(BasePage):
     BTN_DETERMINE = {"name": "com.cloudedge.smarteye:id/positiveButton", "text": TEXT_DETERMINE}
 
     def wait_for_page_loaded(self, timeout: float = 30.0) -> bool:
-        """等待页面加载完成（tv_top_title 含「无线连接」 + rv_wifi_list 出现）。"""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self.exists(self.TV_TOP_TITLE) and self.exists(self.RV_WIFI_LIST):
-                title = self.get_text(self.TV_TOP_TITLE)
-                if any(kw in title for kw in self.EXPECTED_TOP_TITLE_KEYWORDS):
-                    logger.debug(f"Chime 无线连接页已加载：{title!r}")
-                    return True
-            time.sleep(0.5)
-        logger.warning(f"Chime 无线连接页在 {timeout}s 内未加载")
-        return False
+        """等待页面加载完成（SSID 输入框 wifi_name_et 出现）。
+
+        2026-10-10 优化：原实现要求 `tv_top_title` + `rv_wifi_list` 同时
+        存在。但 APP 端 WiFi 列表是**异步渲染**（先出标题+输入框，
+        再异步出列表），严格同步导致 30s 几乎必超时。改等 SSID 输入框
+        （< 1s 就绪）即可。WiFi 列表的等待交给 `wait_wifi_search_finished`
+        或在 `ensure_wifi_list_collapsed` 显式处理。
+        """
+        return self.wait_for_element(self.WIFI_NAME_ET, timeout=timeout)
 
     def wait_wifi_search_finished(self, timeout: float = 30.0) -> bool:
         """等待 WiFi 列表渲染完成。

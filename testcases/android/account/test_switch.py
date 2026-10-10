@@ -1,4 +1,4 @@
-"""安卓端特有用例：退出登录 → 切换登录另一账号 全流程（账号切换）。
+"""账号模块 · 账号切换测试：同一设备上退出登录后切换登录另一账号。
 
 业务背景：
     同一设备上先登录 A 账号（美国区），通过「我的 → 我的信息 → 退出登录」
@@ -6,15 +6,16 @@
     退出登录时「记住密码」会使账号/密码框预填 A 账号（已真机验证：
     poco set_text 为替换行为，直接输入 B 账号即可覆盖，无需清空）。
 
-前置条件：
-    1. 设备已连接，并通过 `adb devices` 可见
-    2. 已安装并启用 ADBKeyboard：
-         adb install -r ADBKeyboard.apk
-         adb shell ime enable com.android.adbkeyboard/.AdbIME
-    3. config.yaml 中至少配置一台 Android 设备（device_info fixture 依赖）
+前置条件（由 android_test_env fixture 保证）：
+    pm clear → 预授权 11 项权限 → 禁用 autofill
+
+fixture 选择说明：
+    本测试需要执行两次完整登录（A → 退出 → B），无法直接复用 android_logged_in
+    （它只登录一次），故使用更底层的 android_test_env 自行管理登录流程，
+    并直接调用共享工具 wait_for_main_activity / wait_for_activity。
 
 运行方式：
-    pytest testcases/android/test_account_switch.py --platform android
+    pytest testcases/android/account/test_switch.py --platform android
     python run.py --platform android -k test_switch_account
 """
 
@@ -26,10 +27,8 @@ import pytest
 from pages.android.main_page import CloudEdgeMainPage
 from pages.android.my_page import CloudEdgeMyPage
 from pages.page_factory import PageFactory
-from testcases.android.test_login_region import RUNTIME_PERMISSIONS
-from testcases.android.test_login_region import _wait_for_main_activity
-from testcases.android.test_logout import MY_INFO_ACTIVITY_KEYWORD
-from testcases.android.test_logout import _wait_for_activity
+from testcases.android.conftest import wait_for_activity, wait_for_main_activity
+
 
 # 账号 A：美国区（先登录）
 US_REGION = "美国"
@@ -48,23 +47,25 @@ CN_PASSWORD = "56565099A"
 @allure.story("退出登录后切换登录另一账号")
 @allure.severity(allure.severity_level.CRITICAL)
 @allure.title("美国账号登录 → 退出登录 → 中国账号登录")
-def test_switch_account(platform, poco_driver, device_info):
+def test_switch_account(android_test_env, platform, poco_driver, device_info):
     """完整账号切换流程：美国账号登录 → 退出 → 中国账号登录。
 
     步骤：
-    1. 前置：pm clear / 预授权运行时权限 / 禁用 autofill（复用登录用例策略）
-    2. 账号 A（美国区）登录，断言进入 MainActivity
-    3. 切到「我的」页 → 账号入口 tv_account → 「我的信息」页
-    4. 退出登录（弹窗「确定」），断言回到登录页
-    5. 账号 B（中国区）登录：选国家「中国」+ 账号密码（覆盖预填的 A 账号）
-    6. 断言再次进入 MainActivity
-    7. 切到「我的」页，断言顶部账号文本已变为 B 账号
+    1. 账号 A（美国区）登录，断言进入 MainActivity
+    2. 切到「我的」页 → 账号入口 tv_account → 「我的信息」页
+    3. 退出登录（弹窗「确定」），断言回到登录页
+    4. 账号 B（中国区）登录：选国家「中国」+ 账号密码（覆盖预填的 A 账号）
+    5. 断言再次进入 MainActivity
+    6. 切到「我的」页，断言顶部账号文本已变为 B 账号
     """
     if platform != "android":
         pytest.skip("账号切换流程仅适用于 Android（CloudEdge），iOS 端跳过")
 
     allure.dynamic.tag(platform)
     allure.dynamic.parameter("device", device_info.user_name)
+
+    # android_test_env 负责 pm clear / 预授权 / autofill 禁用与还原
+    _ = android_test_env
 
     login_page = PageFactory.create(
         platform, "login_page", poco=poco_driver, udid=device_info.udid
@@ -75,40 +76,7 @@ def test_switch_account(platform, poco_driver, device_info):
         platform, "account_page", poco=poco_driver, udid=device_info.udid
     )
 
-    original_autofill = ""
     try:
-        # ---- 前置：清除 app 数据，确保从登录页开始 ----
-        with allure.step("清除 app 数据（确保从登录页开始）"):
-            login_page._run_device_command(
-                ["adb", "-s", device_info.udid, "shell", "pm", "clear",
-                 device_info.app_package],
-                timeout=15,
-            )
-            # MIUI 上 pm clear 为异步清理，立即授权可能被后续清理覆盖，稍等再授权
-            time.sleep(2.0)
-
-        # ---- 前置：预先授予运行时权限（避免 MIUI 安全沙箱权限弹窗阻塞） ----
-        with allure.step("预先授予运行时权限"):
-            for permission in RUNTIME_PERMISSIONS:
-                login_page._run_device_command(
-                    ["adb", "-s", device_info.udid, "shell", "pm", "grant",
-                     device_info.app_package, permission],
-                    timeout=5,
-                )
-
-        # ---- 前置：禁用系统 autofill 服务（避免 MIUI 自动填充弹窗遮挡登录页） ----
-        with allure.step("禁用系统 autofill 服务"):
-            original_autofill = login_page._run_device_command(
-                ["adb", "-s", device_info.udid, "shell",
-                 "settings", "get", "secure", "autofill_service"],
-                timeout=5,
-            ).strip()
-            login_page._run_device_command(
-                ["adb", "-s", device_info.udid, "shell",
-                 "settings", "put", "secure", "autofill_service", "null"],
-                timeout=5,
-            )
-
         # ---- 阶段 1：账号 A（美国区）登录 ----
         with allure.step(f"账号 A 登录：选国家「{US_REGION}」 + {US_ACCOUNT}"):
             login_page.start_app(device_info.app_package)
@@ -122,12 +90,12 @@ def test_switch_account(platform, poco_driver, device_info):
             )
 
         with allure.step("断言账号 A 登录成功 → 进入 MainActivity"):
-            assert _wait_for_main_activity(login_page, timeout=60), (
+            assert wait_for_main_activity(login_page, timeout=60), (
                 f"[android] 账号 A 登录后前台 Activity 仍为 "
                 f"{login_page.get_current_activity()}，未切换到 MainActivity"
             )
 
-        # ---- 阶段 2：退出登录 ----
+        # ---- 阶段 2：进入我的信息页 + 退出登录 ----
         with allure.step("切到「我的」页并点击账号入口 tv_account"):
             time.sleep(2.0)  # 等待主页渲染稳定
             main_page.open_my_page()
@@ -138,9 +106,7 @@ def test_switch_account(platform, poco_driver, device_info):
             jumped = False
             for _ in range(3):
                 my_page.open_account_page()
-                if _wait_for_activity(
-                    login_page, MY_INFO_ACTIVITY_KEYWORD, timeout=8
-                ):
+                if wait_for_activity(login_page, "MyInformationActivity", timeout=8):
                     jumped = True
                     break
             assert jumped, (
@@ -176,7 +142,7 @@ def test_switch_account(platform, poco_driver, device_info):
             )
 
         with allure.step("断言账号 B 登录成功 → 再次进入 MainActivity"):
-            assert _wait_for_main_activity(login_page, timeout=60), (
+            assert wait_for_main_activity(login_page, timeout=60), (
                 f"[android] 账号 B 登录后前台 Activity 仍为 "
                 f"{login_page.get_current_activity()}，未切换到 MainActivity"
             )
@@ -193,18 +159,5 @@ def test_switch_account(platform, poco_driver, device_info):
                 f"期望 {CN_ACCOUNT}"
             )
     finally:
-        # 后置：还原系统 autofill 服务（若有原值）
-        try:
-            if original_autofill and original_autofill != "null":
-                login_page._run_device_command(
-                    ["adb", "-s", device_info.udid, "shell",
-                     "settings", "put", "secure", "autofill_service",
-                     original_autofill],
-                    timeout=5,
-                )
-        except Exception as exc:  # noqa: BLE001 还原失败不影响用例结果上报
-            print(f"[警告] 还原 autofill 服务失败：{exc}")
-
-        # 后置：关闭 app
         with allure.step("关闭 CloudEdge"):
             login_page.stop_app(device_info.app_package)

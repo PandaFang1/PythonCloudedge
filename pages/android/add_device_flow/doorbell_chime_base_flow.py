@@ -112,8 +112,12 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         self.power_supply_page.click_next()
         self.log_step("confirm_power_supply", "完成")
 
-    def select_device_by_sn(self, sn: str, timeout: float = 30.0) -> None:
+    def select_device_by_sn(self, sn: str, timeout: float = 150.0) -> None:
         """步骤 3：在搜到的设备中点击目标 SN 右侧的「添加」按钮。
+
+        :param sn: 设备 SN / 序列号（默认 `DEFAULT_DEVICE_SN`）
+        :param timeout: 等待超时（2026-10-10 由 30s 改为 150s，对齐
+            APP 端蓝牙搜索 130s 倒计时 + 20s buffer）
 
         :param sn: 设备 SN / 序列号（默认 `DEFAULT_DEVICE_SN`）
         """
@@ -124,10 +128,26 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         self.log_step("select_device_by_sn", "完成")
 
     def wait_wifi_ready(self, timeout_loading: float = 30.0) -> None:
-        """步骤 4：等待「无线连接」页加载完成（忽略提示文案，列表渲染即就绪）。"""
+        """步骤 4：等待「无线连接」页加载完成（SSID 输入框就绪）。
+
+        2026-10-10 优化：原实现连续等两次「WiFi 列表（rv_wifi_list）渲染
+        完成」，单步 30s，合计 60s 必超时但仍返回 False，浪费严重。
+        根因：APP 进入「无线连接」页时**先出标题+SSID 输入框**（< 1s），
+        **再异步扫周边 WiFi + 渲染 rv_wifi_list**（~30-60s）。但我们
+        走**手动输入 SSID 路径**，根本不用列表项 —— WiFi 列表渲染
+        只在 `ensure_wifi_list_collapsed` 中用于「是否点箭头收起」判断，
+        而后者有显式 10s `wait_for_element(tv_change_wifi)`，能 handle
+        列表未渲染场景。
+
+        新实现：只等 `wifi_name_et`（SSID 输入框）出现，< 1s 通过。
+        """
         self.log_step("wait_wifi_ready", "开始")
-        self.wifi_config_page.wait_for_page_loaded(timeout=timeout_loading)
-        self.wifi_config_page.wait_wifi_search_finished(timeout=timeout_loading)
+        if not self.wifi_config_page.wait_for_page_loaded(timeout=timeout_loading):
+            raise ElementNotFoundError(
+                f"「无线连接」页 SSID 输入框（wifi_name_et）在 "
+                f"{timeout_loading}s 内未出现"
+            )
+        # 不再调 wait_wifi_search_finished（冗余）
         self.log_step("wait_wifi_ready", "完成")
 
     def input_wifi_credentials(
@@ -180,8 +200,13 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         )
         self.log_step("confirm_wifi_popup", "完成")
 
-    def wait_network_connected(self, timeout_connecting: float = 90.0) -> None:
-        """步骤 7：等待「连接网络」转圈消失，进入「连接成功」页。"""
+    def wait_network_connected(self, timeout_connecting: float = 150.0) -> None:
+        """步骤 7：等待「连接网络」转圈消失，进入「连接成功」页。
+
+        :param timeout_connecting: 等待超时（2026-10-10 由 90s 改为 150s，
+            对齐首配对 + 中文 SSID 等慢场景；典型 ~30-60s，但首配对会
+            触发「注册到云端」等额外网络请求）
+        """
         self.log_step("wait_network_connected", "开始")
         self.connecting_page.wait_for_page_loaded(timeout=15.0)
         self.connecting_page.wait_connected(timeout=timeout_connecting)
@@ -272,7 +297,7 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
         )
         # 步骤 7-8：连接与完成
         self.wait_network_connected(
-            timeout_connecting=kwargs.get("timeout_connecting", 90),
+            timeout_connecting=kwargs.get("timeout_connecting", 150),
         )
         self.click_next_and_finish(timeout=kwargs.get("timeout", 30))
         # 步骤 9：安装指引 + 返回首页
@@ -285,3 +310,5 @@ class DoorbellChimeBaseFlow(BaseAddDeviceFlow):
             f"[{self.FLOW_NAME}] 快捷端到端添加流程已完成："
             f"category={self.category!r}，type_name={self.type_name!r}"
         )
+        # 2026-10-10 增：打印每步耗时表，便于回归时定位瓶颈
+        self.print_step_durations()

@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
@@ -103,6 +104,13 @@ class BaseAddDeviceFlow(ABC):
         self.type_name = type_name
         self.type_des = type_des
         self._completed_steps: list[str] = []
+        # 步骤开始时间字典（2026-10-10 增）：用于 log_step 自动打印每步耗时
+        # key=步骤名，value=perf_counter() 起始时刻
+        self._step_starts: dict[str, float] = {}
+        # 步骤耗时表（2026-10-10 增）：用于测试结束打印「步骤→耗时」统计。
+        # key=步骤名（保持与 _step_starts 一致），value=秒（float）。
+        # 同名步骤会被覆盖（一般不会发生）。
+        self._step_durations: dict[str, float] = {}
 
     # ==================== 模板方法 ====================
 
@@ -144,7 +152,7 @@ class BaseAddDeviceFlow(ABC):
         )
         # 步骤 7-8：连接与完成
         self.wait_network_connected(
-            timeout_connecting=kwargs.get("timeout_connecting", 90),
+            timeout_connecting=kwargs.get("timeout_connecting", 150),
         )
         self.click_next_and_finish(timeout=kwargs.get("timeout", 30))
         # 步骤 9：安装指引 + 返回首页
@@ -157,6 +165,8 @@ class BaseAddDeviceFlow(ABC):
             f"[{self.FLOW_NAME}] 端到端添加流程已完成："
             f"category={self.category!r}，type_name={self.type_name!r}"
         )
+        # 2026-10-10 增：打印每步耗时表，便于回归时定位瓶颈
+        self.print_step_durations()
 
     # ==================== 步骤方法（子类按需重写） ====================
 
@@ -174,10 +184,12 @@ class BaseAddDeviceFlow(ABC):
             "应等待电源页加载并点击「下一步」",
         )
 
-    def select_device_by_sn(self, sn: str, timeout: float = 30.0) -> None:
+    def select_device_by_sn(self, sn: str, timeout: float = 150.0) -> None:
         """步骤 3：在搜到的设备列表中，点击指定 SN 右侧的「添加」按钮。
 
         :param sn: 设备 SN / 序列号
+        :param timeout: 等待超时（2026-10-10 由 30s 改为 150s，对齐
+            APP 端蓝牙搜索 130s 倒计时 + 20s buffer）
         """
         raise FlowStepNotImplementedError(
             self.FLOW_NAME, "select_device_by_sn",
@@ -224,8 +236,12 @@ class BaseAddDeviceFlow(ABC):
             "应比对弹框中显示的 SSID/密码与输入一致后点「确定」",
         )
 
-    def wait_network_connected(self, timeout_connecting: float = 90.0) -> None:
-        """步骤 7：等待「连接网络」转圈消失，进入成功页。"""
+    def wait_network_connected(self, timeout_connecting: float = 150.0) -> None:
+        """步骤 7：等待「连接网络」转圈消失，进入成功页。
+
+        :param timeout_connecting: 等待超时（2026-10-10 由 90s 改为 150s，
+            对齐首配对 + 中文 SSID 等慢场景）
+        """
         raise FlowStepNotImplementedError(
             self.FLOW_NAME, "wait_network_connected",
             "应等待连接中转圈消失",
@@ -273,14 +289,34 @@ class BaseAddDeviceFlow(ABC):
         raise HardwareInteractionRequired(step_name, reason)
 
     def log_step(self, step_name: str, message: str) -> None:
-        """记录步骤开始/完成的辅助日志。
+        """记录步骤开始/完成的辅助日志（2026-10-10 起自动打印耗时）。
+
+        协议：
+        - message == "开始"：记下 perf_counter() 起点
+        - message 含 "完成" / "跳过"：算 elapsed = perf_counter() - 起点
+          并附加到日志（"（耗时 X.XXs）"）；同时入 _completed_steps
+        - 其他普通描述：原样记录
 
         :param step_name: 步骤名
-        :param message: 描述（如「完成」「跳过」）
+        :param message: 描述（如「开始」/「完成」/「跳过（页面未出现）」）
         """
-        logger.info(f"[{self.FLOW_NAME}] {step_name}：{message}")
-        if "完成" in message or "跳过" in message:
+        elapsed_str = ""
+        if message == "开始" or message.startswith("开始（"):
+            # 2026-10-10 修复：兼容 message == "开始（SN='xxx'）" 这类
+            # 带附加信息的开始日志（select_device_by_sn /
+            # input_wifi_credentials / 等使用 f-string 拼接参数）。
+            # 同名步骤重入时以最后一次为准（一般不会发生）。
+            self._step_starts[step_name] = time.perf_counter()
+        elif "完成" in message or "跳过" in message:
+            start = self._step_starts.pop(step_name, None)
+            if start is not None:
+                elapsed = time.perf_counter() - start
+                elapsed_str = f"（耗时 {elapsed:.2f}s）"
+                self._step_durations[step_name] = elapsed
             self._completed_steps.append(step_name)
+        logger.info(
+            f"[{self.FLOW_NAME}] {step_name}：{message}{elapsed_str}"
+        )
 
     @property
     def completed_steps(self) -> list[str]:
@@ -296,3 +332,41 @@ class BaseAddDeviceFlow(ABC):
             "type_des": self.type_des or "",
             "completed": ",".join(self._completed_steps) or "(none)",
         }
+
+    def step_durations(self) -> List[tuple]:
+        """返回「(步骤名, 耗时秒)」按执行顺序排列。
+
+        用于测试结束时打印耗时统计。仅含 log_step 标记为「完成/跳过」
+        的步骤（即带计时的步骤）。
+        """
+        return [
+            (name, self._step_durations[name])
+            for name in self._completed_steps
+            if name in self._step_durations
+        ]
+
+    def print_step_durations(self) -> None:
+        """打印「步骤名 → 耗时」统计表（2026-10-10 增，用于调试与回归）。
+
+        按执行顺序输出，每个步骤一行 + 一个 TOTAL 行；耗时 ≥ 10s 的
+        步骤会被标记 [SLOW]，便于快速定位瓶颈。失败场景下也可能打印
+        （步骤列表反映「已完成到哪一步」）。
+        """
+        durations = self.step_durations()
+        if not durations:
+            logger.info(
+                f"[{self.FLOW_NAME}] 步骤耗时统计：无完成步骤（流程未跑到 log_step 完成）"
+            )
+            return
+        width = max(len(name) for name, _ in durations)
+        logger.info(
+            f"[{self.FLOW_NAME}] 步骤耗时统计（{len(durations)} 步）："
+        )
+        total = 0.0
+        for name, dur in durations:
+            total += dur
+            tag = "  [SLOW]" if dur >= 10.0 else ""
+            logger.info(
+                f"  - {name:<{width}}  {dur:6.2f}s{tag}"
+            )
+        logger.info(f"  - {'TOTAL':<{width}}  {total:6.2f}s")

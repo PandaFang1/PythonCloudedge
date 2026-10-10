@@ -55,6 +55,16 @@ class JingleDeletePage(BasePage):
     # 右上角设置按钮
     JINGLE_BTN_SETTING = {"name": "com.cloudedge.smarteye:id/iv_submit"}
 
+    # ==================== jingle 首页识别点（补充，2026-10-10 增）====================
+    # 在工具栏标题=SN 之外再叠加 2 个稳定控件，3 元素同时存在才判定进入
+    # jingle 首页，进一步降低点击落空 / 标题文本与设备 SN 撞名导致的误判。
+    JINGLE_IV_STATE_ON = {
+        "name": "com.cloudedge.smarteye:id/iv_state_on",
+    }  # 设备状态图标（在线/离线指示）
+    JINGLE_SWITCH_BTN_SCHEDULES = {
+        "name": "com.cloudedge.smarteye:id/switch_btn_schedules",
+    }  # 「日程」开关按钮
+
     # ==================== 设置页（CameraSettingNewActivity）====================
     SETTING_TV_TITLE = {"name": "com.cloudedge.smarteye:id/tv_title"}
     SETTING_TITLE_TEXT = "设置"
@@ -82,11 +92,18 @@ class JingleDeletePage(BasePage):
 
     # ==================== 各步骤方法 ====================
 
-    def open_jingle_home_by_sn(self, sn: str, timeout: float = 30.0) -> None:
+    def open_jingle_home_by_sn(
+        self, sn: str, timeout: float = 30.0, retries: int = 3,
+    ) -> None:
         """步骤 1：主页点击设备 SN，进入 jingle 首页（JingleBaseActivity）。
 
+        点击后验证工具栏标题是否变为设备 SN；未生效（页面加载动画中
+        poco 坐标不准导致点击落空）则重新点击，最多 retries 次。
+
         :param sn: 设备 SN（主页 Chime Base 条目名，`tvJingleNeutralName`）
-        :raises ElementNotFoundError: 主页未见该设备或进入超时
+        :param timeout: 主页加载 + 每次点击后等待的超时（秒）
+        :param retries: 点击落空时的最大重试次数
+        :raises ElementNotFoundError: 主页未见该设备或重试后仍未进入
         """
         if not self.main_page.wait_for_page_loaded(timeout=timeout):
             raise ElementNotFoundError(f"主页在 {timeout}s 内未加载")
@@ -107,45 +124,83 @@ class JingleDeletePage(BasePage):
             raise ElementNotFoundError(
                 f"主页未见设备 SN={sn!r}（当前设备列表：{devices}）"
             )
-        target.click()
-        logger.info(f"主页：已点击设备「{sn}」，等待 jingle 首页加载")
 
-        # 等待 JingleBaseActivity：工具栏标题变为设备 SN
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self.exists(self.JINGLE_TV_TITLE) and \
-                    (self.get_text(self.JINGLE_TV_TITLE) == sn):
-                logger.info(f"已进入 jingle 首页（标题=SN={sn!r}）")
-                return
-            time.sleep(0.5)
+        for attempt in range(1, retries + 1):
+            target.click()
+            logger.info(f"主页：已点击设备「{sn}」（第 {attempt}/{retries} 次）")
+
+            deadline = time.time() + 12
+            while time.time() < deadline:
+                # 2026-10-10 起：jingle 首页采用 3 元素组合识别点
+                # (tv_title==SN) AND iv_state_on AND switch_btn_schedules
+                if (self.exists(self.JINGLE_TV_TITLE)
+                        and (self.get_text(self.JINGLE_TV_TITLE) == sn)
+                        and self.exists(self.JINGLE_IV_STATE_ON)
+                        and self.exists(self.JINGLE_SWITCH_BTN_SCHEDULES)):
+                    logger.info(
+                        f"已进入 jingle 首页（标题=SN={sn!r}，"
+                        f"iv_state_on + switch_btn_schedules 均已出现）"
+                    )
+                    return
+                time.sleep(0.5)
+            logger.warning(
+                f"第 {attempt}/{retries} 次点击设备「{sn}」未进入 jingle 首页"
+                f"（当前 Activity={self.get_current_activity().strip()}），重试"
+            )
         raise ElementNotFoundError(
-            f"点击设备「{sn}」后 {timeout}s 内未进入 jingle 首页"
+            f"点击设备「{sn}」重试 {retries} 次后仍未进入 jingle 首页"
         )
 
-    def open_setting_page(self, timeout: float = 15.0) -> None:
+    def open_setting_page(
+        self, timeout: float = 15.0, retries: int = 3,
+    ) -> None:
         """步骤 2：jingle 首页点右上角设置按钮，进入设置页。
 
-        :raises ElementNotFoundError: 设置按钮未出现或设置页未加载
+        点击后验证设置页标题是否为「设置」；未生效（点击落空）则在
+        确认仍在 jingle 首页后重新点击，最多 retries 次。
+
+        :param timeout: 设置按钮等待 + 每次点击后等待的超时（秒）
+        :param retries: 点击落空时的最大重试次数
+        :raises ElementNotFoundError: 重试后仍未进入设置页
         """
         if not self.wait_for_element(self.JINGLE_BTN_SETTING, timeout=timeout):
             raise ElementNotFoundError(
                 f"jingle 首页右上角设置按钮（iv_submit）{timeout}s 内未出现"
             )
-        self.click(self.JINGLE_BTN_SETTING)
-        logger.info("jingle 首页：已点击右上角设置按钮")
 
-        # 等待设置页（标题='设置'）
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self.exists(self.SETTING_TV_TITLE) and \
-                    (self.get_text(self.SETTING_TV_TITLE) == self.SETTING_TITLE_TEXT):
-                logger.info("已进入设置页（标题='设置'）")
-                return
-            time.sleep(0.5)
-        raise ElementNotFoundError(
-            f"点击设置按钮后 {timeout}s 内未进入设置页（标题应为"
-            f"{self.SETTING_TITLE_TEXT!r}）"
-        )
+        for attempt in range(1, retries + 1):
+            self.click(self.JINGLE_BTN_SETTING)
+            logger.info(f"jingle 首页：已点击右上角设置按钮（第 {attempt}/{retries} 次）")
+
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                if self.exists(self.SETTING_TV_TITLE) and \
+                        (self.get_text(self.SETTING_TV_TITLE) == self.SETTING_TITLE_TEXT):
+                    logger.info("已进入设置页（标题='设置'）")
+                    return
+                time.sleep(0.5)
+
+            # 未进入设置页：若仍在 jingle 首页（标题=SN）则等待按钮可点后重试
+            if self.exists(self.JINGLE_TV_TITLE):
+                logger.warning(
+                    f"第 {attempt}/{retries} 次点击设置按钮未进入设置页"
+                    f"（当前 Activity={self.get_current_activity().strip()}），重试"
+                )
+                self.wait_for_element(self.JINGLE_BTN_SETTING, timeout=timeout)
+            else:
+                # 已离开 jingle 首页但也不是设置页，交由外层重试判定
+                logger.warning(
+                    f"第 {attempt}/{retries} 次点击后离开 jingle 首页但未到设置页，"
+                    f"Activity={self.get_current_activity().strip()}"
+                )
+
+        if not (self.exists(self.SETTING_TV_TITLE) and
+                (self.get_text(self.SETTING_TV_TITLE) == self.SETTING_TITLE_TEXT)):
+            raise ElementNotFoundError(
+                f"点击设置按钮重试 {retries} 次后仍未进入设置页"
+                f"（标题应为 {self.SETTING_TITLE_TEXT!r}，当前 Activity="
+                f"{self.get_current_activity().strip()}）"
+            )
 
     def _is_delete_btn_visible(self) -> bool:
         """判断「删除设备」按钮当前是否可见（在屏内）。"""

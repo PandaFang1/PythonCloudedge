@@ -31,6 +31,39 @@
 - 串口用例放 `testcases/` 根目录（如 `test_serial.py`），不进入平台子目录
 - 测试数据放 `test_datas/`，禁止硬编码到用例内
 
+### 1.2.1 测试模块子目录约定（按业务模块聚合）
+
+> 自 2026-10-10 起，**安卓端测试按业务模块分子目录**聚合，详见
+> [账号模块文档](../guide/account-module.md) /
+> [Jingle 添加模块文档](../guide/jingle-add-module.md) /
+> [Jingle 删除模块文档](../guide/jingle-delete-module.md)。
+
+```
+testcases/android/
+├── conftest.py              # 跨模块共享：常量、工具函数、跨模块 fixture
+├── test_add_device.py       # 公共用例（按类别 / 蓝牙两种方式）— 基础设施
+├── test_app_lifecycle.py    # 公共用例，app 生命周期
+├── account/                 # 账号模块
+│   ├── conftest.py          # 模块 fixture（android_my_page、android_account_page）
+│   ├── test_login.py
+│   ├── test_logout.py
+│   └── test_switch.py
+├── jingle_add/              # Jingle 添加模块
+│   ├── conftest.py          # 模块 fixture（jingle_category_page）
+│   ├── test_full.py
+│   └── test_quick.py
+└── jingle_delete/           # Jingle 删除模块
+    ├── conftest.py          # 模块 fixture（jingle_main_with_target）
+    └── test_delete.py
+```
+
+**强约束**：
+
+1. **测试文件不得 import 其他 test_*.py 文件**（消除横向耦合）
+2. 跨模块共享的工具/常量/fixture 放在 `testcases/android/conftest.py`
+3. 单模块特有的 fixture 放在该模块自己的 `conftest.py`
+4. **禁止反向依赖**：模块 conftest.py 可依赖共享 conftest，反之不允许
+
 ## 1.3 PO 页面编写规范
 
 **强制要求**：
@@ -99,6 +132,121 @@ class TestPage(BasePage):
 - 严禁未使用 import、严禁 `print()` 调试（用 `logger.debug`）
 - 类与公共方法必须有 docstring（中文或英文均可）
 - 禁止单文件超过 **500 行**（超过则拆分）
+
+## 1.7 模块化与链式调用约定
+
+> 本节是 2026-10-10 模块化重构后的**核心约定**，所有新增测试 / 业务方法必须遵守。
+
+### 1.7.1 Fixture 链式依赖
+
+fixture 按"自底向上"分层复用，**高级 fixture 依赖低级 fixture**，通过 yield 传递结果：
+
+```
+# testcases/android/conftest.py — 跨模块共享层
+android_test_env         # pm clear + 预授权 + 禁用 autofill
+    ↓
+android_logged_in        # 启动 app + 登录（账号模块使用，依赖 android_test_env）
+android_preserved_app    # force-stop + 启动 + 按需登录（设备模块使用，不 pm clear）
+    ↓
+android_category_page    # 登录态主页 → 「选择设备类别」页（依赖 android_logged_in）
+
+# account/conftest.py — 账号模块特有
+android_my_page          # 登录态主页 → 「我的」Tab（依赖 android_logged_in）
+    ↓
+android_account_page     # 「我的」Tab → 「我的信息」页（依赖 android_my_page）
+
+# jingle_add/conftest.py — Jingle 添加模块特有
+jingle_category_page     # 登录态主页 → 「选择设备类别」页（依赖 android_preserved_app）
+
+# jingle_delete/conftest.py — Jingle 删除模块特有
+jingle_main_with_target  # 登录态主页 + jingle_delete_page（依赖 android_preserved_app）
+```
+
+**用例仅需声明依赖的最高级 fixture**：
+
+```python
+# ✅ 推荐：用例只声明所需的最外层 fixture，链式内部细节全在 conftest 中
+def test_logout(android_account_page, platform, device_info):
+    login_page, main_page, my_page, account_page = android_account_page
+    account_page.logout(confirm=True)
+
+# ❌ 反例：在用例内手动串联多个 fixture 调用
+def test_logout(android_test_env, android_logged_in, ...):
+    # 重复实现 fixture 已经封装好的样板代码
+    ...
+```
+
+### 1.7.2 Fixture 命名规范
+
+- **跨模块共享**：`android_` 前缀（如 `android_test_env`、`android_logged_in`）
+- **模块特有**：`<模块名>_` 前缀（如 `android_my_page` 在 account 模块，但因属账号相关
+  也可加 `account_` 前缀；`jingle_category_page` / `jingle_main_with_target` 显式带 jingle 前缀）
+- **页面对象级**（PO）：`<页面类名小写>`（如 `login_page`、`main_page`）
+
+### 1.7.3 Fixture 层级（自底向上）
+
+| 层级 | 命名风格 | 位置 | 数量限制 |
+|---|---|---|---|
+| 0. 平台/驱动 | `poco_driver`、`airtest_device`、`device_info` | `testcases/conftest.py` | 现有不变 |
+| 1. 跨模块共享环境 | `android_<name>` | `testcases/android/conftest.py` | ≤ 5 个 |
+| 2. 跨模块共享导航 | `android_<page_name>` | `testcases/android/conftest.py` | ≤ 3 个 |
+| 3. 模块特有 | `<module>_<name>` | `<module>/conftest.py` | ≤ 3 个/模块 |
+
+### 1.7.4 业务方法链式返回（推荐，**新代码**遵守）
+
+> 自 2026-10-10 起，**新增**的 Page Object 业务方法推荐**返回 `self`**，便于
+> 「一站式」门面 PO 与外部脚本的链式调用。已存在的方法暂不强制改造。
+
+```python
+# ✅ 推荐：新代码支持链式调用
+class CloudEdgeLoginPage(BasePage):
+    def open_region_picker(self) -> "CloudEdgeLoginPage":
+        self.click(self.LAYOUT_REGION)
+        return self
+
+    def input_account(self, account: str) -> "CloudEdgeLoginPage":
+        self.input_text(self.ET_ACCOUNT, account)
+        return self
+
+# 链式调用（一站式）
+login_page = PageFactory.create("android", "login_page", ...)
+login_page.open_region_picker().input_account("13800138000")
+
+# 一站式门面 PO 的内部复用
+class JingleAddPage(BasePage):
+    def add_jingle_device(self, ...) -> List[str]:
+        # 内部门面 PO 仍按需调用各 page 方法
+        ...
+        devices = self.main_page.get_device_list()
+        return devices
+
+# ❌ 反例：旧风格（仍允许，但鼓励改造）
+def open_region_picker(self) -> None:
+    self.click(self.LAYOUT_REGION)
+```
+
+**返回 `self` 的方法需满足**：
+
+1. 方法无重要返回值（如设备列表）时统一返回 `self`
+2. 类型注解使用字符串形式（`"CloudEdgeLoginPage"`）以避免循环引用
+3. docstring 需注明「支持链式调用」
+
+### 1.7.5 跨模块共享工具下沉
+
+跨多个测试文件复用的代码必须下沉到 `conftest.py`：
+
+| 类型 | 命名 | 位置 |
+|---|---|---|
+| 跨模块常量 | `UPPER_SNAKE_CASE` | 共享 `conftest.py` |
+| 跨模块工具函数 | `snake_case` | 共享 `conftest.py` |
+| 跨模块 fixture | `android_<name>` | 共享 `conftest.py` |
+| 模块内部 fixture | `<module>_<name>` | 模块 `conftest.py` |
+
+**禁止**：
+
+- 在测试函数内 inline 实现跨文件复用的工具函数
+- 在测试文件顶层（模块级）定义跨文件复用的常量
+- 在 `pages/` 下的页面类中实现测试样板（pm clear、权限授予等）
 
 ---
 

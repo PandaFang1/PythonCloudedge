@@ -25,9 +25,11 @@ import pytest
 
 from pages.android.main_page import CloudEdgeMainPage
 from pages.page_factory import PageFactory
-from testcases.android.test_login_region import RUNTIME_PERMISSIONS
-from testcases.android.test_login_region import _wait_for_main_activity
-from testcases.android.test_logout import _wait_for_activity
+from testcases.android.conftest import (
+    RUNTIME_PERMISSIONS,
+    wait_for_activity as _wait_for_activity,
+    wait_for_main_activity as _wait_for_main_activity,
+)
 
 # 设备类别选择页 Activity（点击「添加设备」条目后应跳转至此）
 ADD_DEVICE_ACTIVITY_KEYWORD = "AddSeriesTypeActivity"

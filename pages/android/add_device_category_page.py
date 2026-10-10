@@ -396,7 +396,7 @@ class CloudEdgeAddDeviceCategoryPage(BasePage):
         self.poco.swipe([cx, start_y], [cx, end_y], duration=0.4)
 
     def select_bt_device_auto(
-        self, sn: str, timeout: float = 15.0, max_swipes: int = 10,
+        self, sn: str, timeout: float = 150.0, max_swipes: int = 10,
     ) -> None:
         """快捷添加：在蓝牙区域自动查找并点击指定 SN 的设备。
 

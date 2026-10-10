@@ -128,6 +128,96 @@ pytest testcases/android/test_add_doorbell_chime_base.py --platform android
 7. **重跑前置**：设备配网成功后即离开配对态，重跑需先按复位键重置
    （或从账号删除设备）
 
+## 8. 性能基线与优化记录（2026-10-10）
+
+### 8.1 性能基线（真机 SN 131903227 / Redmi 22101317C）
+
+通过 `log_step` 自动计时（`base_add_device_flow.py::print_step_durations`），
+单次完整配网用例 `test_add_doorbell_chime_131903227` 的 10 步耗时（**优化后**）：
+
+| # | 步骤 | 耗时 | 占比 | 备注 |
+|---|---|---:|---:|---|
+| 1 | `wait_chime_install_page` | 2.68s | 3.1% | 等安装位置页+点「下一步」 |
+| 2 | `confirm_power_supply` | 2.63s | 3.0% | 等电源页+点「下一步」 |
+| 3 | `select_device_by_sn` | 4.48s | 5.2% | 搜到设备 → 点 SN「添加」 |
+| 4 | **`wait_wifi_ready`** | **8.35s** | 9.6% | 等「无线连接」页 + SSID 输入框就绪 |
+| 5 | `input_wifi_credentials` | 11.24s | 12.9% | 切 IME → 输 SSID → 收列表 → 输密码 → 下一步 |
+| 6 | `confirm_wifi_popup` | 2.94s | 3.4% | 弹框比对+点「确定」 |
+| 7 | **`wait_network_connected`** | **42.91s** | **49.4%** | 等设备入网 + 云端注册（最大瓶颈） |
+| 8 | `click_next_and_finish` | 5.07s | 5.8% | 成功页「下一步」+设置房间「完成」 |
+| 9 | `skip_install_guide` | 3.00s | 3.5% | 安装指引「下一步」 |
+| 10 | `back_to_homepage_and_assert` | 3.59s | 4.1% | 网络诊断+主页断言 |
+| | **TOTAL（9 步）** | **86.89s** | 100% | |
+| | **用例总耗时** | **96.71s** | | 含 app 启动+主页断言前置 ~10s |
+
+### 8.2 优化前后对比
+
+| 步骤 | 优化前 | 优化后 | 节省 |
+|---|---:|---:|---:|
+| `wait_wifi_ready` | **60.44s** | **8.35s** | **-52.09s（-86%）** ⚡ |
+| 9 步 TOTAL | 120.47s | 86.89s | -33.58s（-28%） |
+| 用例总耗时 | ~151s | 96.71s | -54s（-36%） |
+
+### 8.3 根因（`wait_wifi_ready` 60s 问题）
+
+**原实现**（`doorbell_chime_base_flow.py` / `chime_device_pairing_pages.py`）：
+
+```python
+def wait_wifi_ready(self, timeout_loading: float = 30.0) -> None:
+    self.log_step("wait_wifi_ready", "开始")
+    self.wifi_config_page.wait_for_page_loaded(timeout=timeout_loading)        # 30s
+    self.wifi_config_page.wait_wifi_search_finished(timeout=timeout_loading)  # 30s
+    self.log_step("wait_wifi_ready", "完成")
+```
+
+**问题清单**：
+1. `ChimeWifiConfigPage.wait_for_page_loaded` 严格等 `TV_TOP_TITLE` + `RV_WIFI_LIST` **同时存在**；APP 端 WiFi 列表是**异步渲染**（先出标题+输入框，再异步出列表），30s 几乎必超时
+2. `ChimeWifiConfigPage.wait_wifi_search_finished` 又调 `wait_for_element(RV_WIFI_LIST, 30)` —— **完全冗余**（第 1 步已等过）
+3. `wait_wifi_ready` **不检查返回值**（两次都返回 False 也继续）
+4. **60s 完全是浪费**：`input_ssid` 实际只用 `wifi_name_et`（SSID 输入框），**根本不用列表项**；列表渲染的等待只服务于 `ensure_wifi_list_collapsed` 中「是否点箭头收起」判断，而后者有显式 10s `wait_for_element(tv_change_wifi)` 兜底
+
+### 8.4 修复方案（2 处 + 1 个 bug）
+
+**改 1**：`DoorbellChimeBaseFlow.wait_wifi_ready` —— 去掉冗余第二次等待，加 raise
+
+```python
+def wait_wifi_ready(self, timeout_loading: float = 30.0) -> None:
+    self.log_step("wait_wifi_ready", "开始")
+    if not self.wifi_config_page.wait_for_page_loaded(timeout=timeout_loading):
+        raise ElementNotFoundError(
+            f"「无线连接」页 SSID 输入框（wifi_name_et）在 {timeout_loading}s 内未出现"
+        )
+    # 不再调 wait_wifi_search_finished（冗余）
+    self.log_step("wait_wifi_ready", "完成")
+```
+
+**改 2**：`ChimeWifiConfigPage.wait_for_page_loaded` —— 改为等 SSID 输入框（< 1s 就绪）
+
+```python
+def wait_for_page_loaded(self, timeout: float = 30.0) -> bool:
+    """等 SSID 输入框（wifi_name_et）出现 —— 标题+输入框瞬间就绪。"""
+    return self.wait_for_element(self.WIFI_NAME_ET, timeout=timeout)
+```
+
+**Bug 修复**（同次改动）：`BaseAddDeviceFlow.log_step` 兼容 `开始（...）` 带后缀的「开始」日志（`select_device_by_sn` / `input_wifi_credentials` 等用 f-string 拼附加信息导致原 `==` 判定失效，3 步耗时丢失）；同时新增 `print_step_durations()` 便于回归基线对比。
+
+### 8.5 进一步优化空间（暂未做）
+
+| 步骤 | 当前 | 理论下限 | 优化方向 |
+|---|---:|---:|---|
+| `wait_wifi_ready` 8.35s | 8.35s | < 1s | 改 `wait_for_element` 用更小轮询间隔（0.2s）；或先检测 `TV_TOP_TITLE` 再 dump `WIFI_NAME_ET`（2 阶段检测） |
+| `input_wifi_credentials` 11.24s | 11.24s | ~9s | `ensure_wifi_list_collapsed` 检测到密码框可见即输入，不等列表完全收起 |
+| `wait_network_connected` 42.91s | 42.91s | 不可优化 | APP 端设备入网+云端注册真实耗时，**测试侧无法干预** |
+
+**预计**再优化可省 **5-8s**（总耗时 96s → ~90s），但因大头（设备入网 42.91s）不可省，**投入产出比低**。
+
+### 8.6 教训
+
+1. **不要等 APP 异步渲染的列表** —— 走「手动输入」路径时，只需等输入框就绪，列表渲染交给后续「是否收起」判断处理
+2. **超时判定必须检查返回值** —— 之前 `wait_wifi_ready` 不检查返回 False，30s 浪费被吞掉
+3. **「开始」+「完成」配对判定要用 `startswith`** —— 兼容 `开始（SN=...）` 等带附加信息的开始日志，否则耗时统计会丢步
+4. **log_step 自动计时 + print_step_durations** 是性能瓶颈分析的关键工具，所有 `run()` 末尾自动打印
+
 ## 7. 相关文档
 
 - [设备添加流程架构](device-add-flow.md) — 策略模式 / 工厂 / 9 步模板
