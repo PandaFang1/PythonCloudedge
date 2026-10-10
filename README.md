@@ -26,6 +26,13 @@ python run.py --platform android
 allure serve reports/allure-html
 ```
 
+## 📱 双端产品
+
+| 平台 | App | 包名 / Bundle ID |
+|---|---|---|
+| Android | CloudEdge | `com.cloudedge.smarteye` |
+| iOS | 云际 | `com.meari.smartcamera` |
+
 ## 📚 文档
 
 完整文档在 [`docs/`](docs/README.md)，推荐路径：
