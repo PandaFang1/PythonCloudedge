@@ -45,6 +45,12 @@ class BasePage:
 
     所有页面类继承本类，通过构造函数注入 poco 驱动，
     页面子类只需定义各自的元素定位（locator）与业务方法。
+
+    门控方法：
+        :meth:`dump_hierarchy` 是项目唯一的 UI 层级树抓取收口，
+        调用时 **必须** 传入非空 ``reason``。项目约定「没有确定
+        要求，不使用本方法」——任何 inline 调用 ``poco.agent.
+        hierarchy.dump()`` 都被视为绕过门控，应重构为调用本方法。
     """
 
     def __init__(self, poco, udid: str = "", platform: str = "android"):
@@ -404,3 +410,42 @@ class BasePage:
             return activity
         logger.warning(f"topResumedActivity 未匹配到，原始输出片段：{output[:200]}")
         return ""
+
+    # ==================== 调试辅助（门控） ====================
+
+    def dump_hierarchy(self, reason: str) -> dict:
+        """抓取当前页面完整 UI 层级树（Android 专用，poco 方式）。
+
+        ⚠️ **门控方法**：本方法**必须**传入非空 ``reason``，否则抛
+        :class:`OperationFailedError`。项目约定「没有确定要求，不使用
+        本方法」——调用方必须在 reason 中明确说明抓取 UI 树的诉求
+        （如「密码框被弹框遮挡，绕过可见性过滤读取文本」），便于事后
+        审计与重构追踪。
+
+        **为什么用 poco 而不是 uiautomator dump**：
+        ``adb shell uiautomator dump`` 会与 ``pocoservice`` 抢占
+        accessibility 服务（exit 137，2026-10-09 真机验证）。本方法
+        走 ``poco.agent.hierarchy.dump()`` 拿整棵 UI 树，绕过可见性
+        限制拿任何控件的文本/属性。
+
+        :param reason: 调用本方法的明确理由（必填，非空）
+        :return: poco hierarchy 原始 dict（含 ``payload`` 字段）
+        :raises OperationFailedError: reason 缺失 / poco 调用失败时
+        """
+        stripped = (reason or "").strip()
+        if not stripped:
+            msg = (
+                "dump_hierarchy() 必须提供非空 reason。"
+                "项目约定：没有确定要求，不允许调用本方法。"
+                "请在 reason 中说明抓取 UI 树的诉求。"
+            )
+            logger.warning(msg)
+            raise OperationFailedError(msg)
+
+        logger.warning(f"dump_hierarchy called: reason={stripped}")
+        try:
+            return self.poco.agent.hierarchy.dump()
+        except Exception as exc:  # noqa: BLE001
+            msg = f"poco dump 失败（reason={stripped}）：{exc}"
+            logger.error(msg)
+            raise OperationFailedError(msg) from exc

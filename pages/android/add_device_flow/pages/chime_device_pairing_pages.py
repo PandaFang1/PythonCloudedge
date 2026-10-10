@@ -256,9 +256,13 @@ class ChimeWifiConfigPage(BasePage):
 
         注：不使用 `uiautomator dump`——它会与 pocoservice 抢占
         accessibility 服务被 kill（exit 137，2026-10-09 真机验证）。
+        走 ``self.dump_hierarchy()`` 走 poco 拿整树（详见 BasePage 门控说明）。
         """
         try:
-            hierarchy = self.poco.agent.hierarchy.dump()
+            hierarchy = self.dump_hierarchy(
+                "ChimeWifiConfigPage 密码框被系统级弹窗遮挡，"
+                "绕过可见性过滤直接读取密码框文本"
+            )
             payload = hierarchy.get("payload", hierarchy) or {}
 
             def _find(node) -> str:
