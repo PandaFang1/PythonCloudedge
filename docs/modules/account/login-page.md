@@ -474,7 +474,7 @@ login_page.click_login()
 
 ## 文档导航
 
-- 上一篇：[页面识别 ←](./page-identification.md)
+- 上一篇：[页面识别 ←](../reference/page-identification.md)
 - 下一篇：[我的信息页（退出登录）→](./account-page.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

@@ -145,8 +145,8 @@ pytest testcases/android/jingle_add/test_full.py --platform android
 ## 11. 相关页面/流程文档
 
 - [智能门铃 Chime Base 一站式添加页（jingle_add_page）](./jingle-add-page.md)
-- [选择设备类别页（add_device_category_page）](./add-device-category-page.md)
-- [设备添加流程（add_device_flow）](./device-add-flow.md)
+- [选择设备类别页（add_device_category_page）](../device_mgmt/add-device-category-page.md)
+- [设备添加流程（add_device_flow）](../device_mgmt/device-add-flow.md)
 
 ## 12. 性能基线与优化记录（2026-10-10）
 
@@ -176,6 +176,6 @@ Redmi 22101317C）首次跑通耗时 ~151s，优化后 **96.71s**（-36%）。
 
 ## 文档导航
 
-- 上一篇：[账号模块文档 ←](./account-module.md)
+- 上一篇：[账号模块文档 ←](../account/account-module.md)
 - 下一篇：[Jingle 删除模块文档 →](./jingle-delete-module.md)
 - [返回文档中心](../README.md) · [返回项目首页](../../README.md)

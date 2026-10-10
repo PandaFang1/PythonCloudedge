@@ -103,4 +103,4 @@ pytest testcases/android/test_delete_doorbell_chime.py --platform android
 ## 5. 文档导航
 
 - 相关：[jingle 添加页面](./jingle-add-page.md)
-- 相关：[设备添加流程策略模式](./device-add-flow.md)
+- 相关：[设备添加流程策略模式](../device_mgmt/device-add-flow.md)

@@ -116,7 +116,7 @@ pytest testcases/android/jingle_delete/test_delete.py --platform android
 ## 10. 相关页面文档
 
 - [智能门铃 Chime Base 一站式删除页（jingle_delete_page）](./jingle-delete-page.md)
-- [主页文档](./page-identification.md)
+- [主页文档](../reference/page-identification.md)
 
 ---
 

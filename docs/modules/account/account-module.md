@@ -107,12 +107,12 @@ python run.py --platform android -k test_login_with_region
 
 - [登录页文档](./login-page.md)
 - [我的信息页文档](./account-page.md)（退出登录弹窗）
-- [主页文档](./page-identification.md)
+- [主页文档](../reference/page-identification.md)
 
 ---
 
 ## 文档导航
 
-- 上一篇：[主页文档 ←](./page-identification.md)
+- 上一篇：[主页文档 ←](../reference/page-identification.md)
 - 下一篇：[Jingle 添加模块文档 →](./jingle-add-module.md)
 - [返回文档中心](../README.md) · [返回项目首页](../../README.md)

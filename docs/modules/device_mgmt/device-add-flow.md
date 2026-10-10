@@ -408,7 +408,7 @@ python -m pytest tests/test_device_flow_factory.py -v
 ## 13. 文档导航
 
 - 上一篇：[「选择设备类别」页](./add-device-category-page.md)
-- 相关：[jingle 添加页面](./jingle-add-page.md)
-- 相关：[jingle 删除页面](./jingle-delete-page.md)
-- 相关：[PO 模式基类与扩展指南](../README.md)
-- 框架：[执行规则](../README.md)
+- 相关：[jingle 添加页面](../chime/jingle-add-page.md)
+- 相关：[jingle 删除页面](../chime/jingle-delete-page.md)
+- 相关：[PO 模式基类与扩展指南](../../README.md)
+- 框架：[执行规则](../../rules/execution.md)

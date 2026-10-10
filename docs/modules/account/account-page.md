@@ -234,6 +234,6 @@ python run.py --platform android -k test_switch_account
 ## 文档导航
 
 - 上一篇：[登录页 ←](./login-page.md)
-- 下一篇：[选择设备类别页 →](./add-device-category-page.md)
+- 下一篇：[选择设备类别页 →](../device_mgmt/add-device-category-page.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

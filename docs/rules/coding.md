@@ -34,9 +34,9 @@
 ### 1.2.1 测试模块子目录约定（按业务模块聚合）
 
 > 自 2026-10-10 起，**安卓端测试按业务模块分子目录**聚合，详见
-> [账号模块文档](../guide/account-module.md) /
-> [Jingle 添加模块文档](../guide/jingle-add-module.md) /
-> [Jingle 删除模块文档](../guide/jingle-delete-module.md)。
+> [账号模块文档](../modules/account/README.md) /
+> [Chime 添加模块文档](../modules/chime/jingle-add-module.md) /
+> [Chime 删除模块文档](../modules/chime/jingle-delete-module.md)。
 
 ```
 testcases/android/
@@ -252,7 +252,7 @@ def open_region_picker(self) -> None:
 
 ## 文档导航
 
-- 上一篇：[串口测试 ←](../guide/serial.md)
+- 上一篇：[串口测试 ←](../reference/serial.md)
 - 下一篇：[用例编写规则 →](./testcase.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

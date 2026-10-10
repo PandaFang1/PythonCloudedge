@@ -304,7 +304,7 @@ python run.py --platform android -k test_add_device_by_bluetooth
 
 ## 文档导航
 
-- 上一篇：[我的信息页（退出登录）←](./account-page.md)
-- 下一篇：[串口测试 →](./serial.md)
+- 上一篇：[我的信息页（退出登录）←](../account/account-page.md)
+- 下一篇：[串口测试 →](../reference/serial.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)

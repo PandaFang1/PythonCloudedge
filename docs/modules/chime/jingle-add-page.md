@@ -220,5 +220,5 @@ def wait_for_page_loaded(self, timeout: float = 30.0) -> bool:
 
 ## 7. 相关文档
 
-- [设备添加流程架构](device-add-flow.md) — 策略模式 / 工厂 / 9 步模板
-- [选择设备类别页](add-device-category-page.md) — 大类别→小类别选择与蓝牙方式
+- [设备添加流程架构](../device_mgmt/device-add-flow.md) — 策略模式 / 工厂 / 9 步模板
+- [选择设备类别页](../device_mgmt/add-device-category-page.md) — 大类别→小类别选择与蓝牙方式

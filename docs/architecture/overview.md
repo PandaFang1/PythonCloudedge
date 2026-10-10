@@ -39,6 +39,6 @@ graph TD
 ## 文档导航
 
 - 上一篇：[快速开始 ←](../getting-started/quickstart.md)
-- 下一篇：[扩展指南 →](../guide/extension.md)
+- 下一篇：[扩展指南 →](../reference/extension.md)
 
 [返回文档中心](../README.md) · [返回项目首页](../../README.md)
