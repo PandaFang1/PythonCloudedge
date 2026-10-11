@@ -403,7 +403,11 @@ class BasePage:
             logger.warning(f"获取当前 Activity 失败：{exc}")
             return ""
 
-        matched = re.search(r"topResumedActivity=ActivityRecord\{\w+ \w+ (\S+)", output)
+        # 捕获组用 [^\s}]+ 排除 ActivityRecord 的闭括号 }，
+        # 避免 \S+ 贪婪匹配把行尾 } 一起带入返回值
+        # （2026-10-10 真机验证：dumpsys 行为
+        #   topResumedActivity=ActivityRecord{92c7731 u0 com.pkg/.Activity} t739}）
+        matched = re.search(r"topResumedActivity=ActivityRecord\{\w+ \w+ ([^\s}]+)", output)
         if matched:
             activity = matched.group(1)
             logger.debug(f"当前前台 Activity：{activity}")
